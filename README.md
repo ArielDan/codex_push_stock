@@ -1,0 +1,132 @@
+# 每日美股收盘简报飞书推送 Bot
+
+每天北京时间 9:00 自动生成「前一日美股收盘简报」，并通过飞书自定义机器人 Webhook 推送。报告只基于行情数据做结构化总结，不编造新闻归因。
+
+## 环境要求
+
+- 建议 Python 3.11 或 3.12。
+- GitHub Actions 默认使用 Python 3.11。
+- 本机如只有旧版 Python，请先安装 3.11+；部分行情依赖在更新 Python 版本上更稳定。
+
+## 本地运行
+
+```bash
+python -m pip install -r requirements.txt
+python main.py --dry-run
+```
+
+如果你的系统没有 `python` 命令，可以改用 `python3.11`：
+
+```bash
+python3.11 -m pip install -r requirements.txt
+python3.11 main.py --dry-run
+```
+
+## dry-run
+
+```bash
+python main.py --dry-run
+```
+
+`--dry-run` 只打印报告内容，不发送飞书，也不要求配置 `FEISHU_WEBHOOK`，适合本地调试数据和格式。
+
+## 飞书 Webhook 配置
+
+1. 在飞书群中添加「自定义机器人」。
+2. 复制机器人 Webhook 地址。
+3. 在本地创建 `.env`：
+
+```bash
+FEISHU_WEBHOOK=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
+POLYGON_API_KEY=
+```
+
+`.env` 已加入 `.gitignore`，不要提交真实 Webhook 或密钥。
+
+配置好后发送正式消息：
+
+```bash
+python main.py
+```
+
+如果飞书发送失败，程序会打印 HTTP 状态码和响应内容。
+
+## 数据源说明
+
+- 默认使用 `yfinance`，适合个人自用 MVP。
+- 当环境变量 `POLYGON_API_KEY` 存在时，会优先尝试 Polygon/Massive 兼容接口。
+- Polygon 拉取失败、特殊 ticker 不支持或单个 ticker 异常时，会 fallback 到 `yfinance`。
+- 单个 ticker 拉取失败不会中断整份报告；报告会标记「数据缺失」或跳过汇总。
+
+## 休市处理
+
+程序会回溯最近 7 天的有效交易数据。北京时间周一 9:00 运行时，美国仍是周日晚上，程序会自动使用上一个有效美股交易日的数据。如果 7 天内核心 ETF 都没有有效数据，会推送「昨日美股休市/无交易数据」。
+
+## 修改或新增 ticker
+
+编辑 `config.py` 中的 `ASSET_GROUPS`：
+
+- 新增资产：在对应分组的 `assets` 里添加 `ticker`、`name`、`note`。
+- 删除资产：删除对应字典。
+- 新增分组：添加一个带 `key`、`title`、`assets` 的分组对象。
+
+## GitHub Actions 部署
+
+工作流文件位于 `.github/workflows/daily-market-report.yml`，配置如下：
+
+- 定时任务：`cron: "0 1 * * *"`，对应北京时间 9:00。
+- 支持手动触发：`workflow_dispatch`。
+- 运行 Python 3.11。
+- 安装 `requirements.txt` 后执行 `python main.py`。
+
+## GitHub Secrets 配置
+
+在 GitHub 仓库页面进入：
+
+`Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`
+
+添加：
+
+- `FEISHU_WEBHOOK`：必填，飞书自定义机器人 Webhook。
+- `POLYGON_API_KEY`：可选，Polygon/Massive API Key。
+
+## 手动触发 GitHub Actions
+
+进入 GitHub 仓库的 `Actions` 页面，选择 `Daily Market Report`，点击 `Run workflow`。
+
+## 修改推送时间
+
+编辑 `.github/workflows/daily-market-report.yml`：
+
+```yaml
+schedule:
+  - cron: "0 1 * * *"
+```
+
+GitHub Actions 使用 UTC 时间。北京时间 = UTC + 8，例如北京时间 9:00 是 UTC 1:00。
+
+## 常见问题
+
+### `FEISHU_WEBHOOK 未配置`
+
+正式发送需要配置 `FEISHU_WEBHOOK`。本地只想看报告请使用：
+
+```bash
+python main.py --dry-run
+```
+
+### 某些 ticker 数据缺失
+
+小票、特殊指数或代理 ticker 可能被数据源限制。程序会记录 warning，并在报告中标记「数据缺失」。
+
+### yfinance 拉取失败
+
+检查网络连接，稍后重试，或配置 `POLYGON_API_KEY` 使用备用数据源。
+
+### 本机 Python 版本过旧
+
+请安装 Python 3.11 或 3.12，并用对应命令运行：
+
+```bash
+python3.11 main.py --dry-run
+```
