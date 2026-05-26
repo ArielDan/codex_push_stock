@@ -8,6 +8,7 @@ from datetime import date
 from statistics import mean
 from typing import Optional
 
+
 @dataclass(frozen=True)
 class AssetQuote:
     ticker: str
@@ -87,17 +88,17 @@ def _format_pct(value: Optional[float]) -> str:
 
 def _format_quote(quote: AssetQuote) -> str:
     if quote.close is None:
-        return f"- {quote.ticker}：数据缺失"
+        return f"- **{quote.ticker}**：数据缺失"
     value = _display_value(quote)
     suffix = quote.display_suffix
     price = f"{value:.2f}{suffix}"
-    return f"- {quote.ticker}：{price}，{_format_pct(quote.pct_change)}"
+    return f"- **{quote.ticker}**：{price} ｜ {_format_pct(quote.pct_change)}"
 
 
 def _format_quote_inline(quote: AssetQuote) -> str:
     if quote.close is None:
-        return f"{quote.ticker} 数据缺失"
-    return f"{quote.ticker} {_format_pct(quote.pct_change)}"
+        return f"**{quote.ticker}** 数据缺失"
+    return f"**{quote.ticker}** {_format_pct(quote.pct_change)}"
 
 
 def _display_value(quote: AssetQuote) -> float:
@@ -107,23 +108,33 @@ def _display_value(quote: AssetQuote) -> float:
 
 
 def _build_core_section(quotes: list[AssetQuote]) -> list[str]:
-    return ["一、核心指数/ETF"] + [_format_quote(quote) for quote in quotes]
+    return ["**一、核心指数 / ETF**"] + [_format_quote(quote) for quote in quotes]
 
 
 def _build_macro_section(quotes: list[AssetQuote]) -> list[str]:
-    return ["二、宏观/风险"] + [_format_quote(quote) for quote in quotes]
+    return ["**二、宏观 / 风险**"] + [_format_quote(quote) for quote in quotes]
 
 
 def _build_sector_section(grouped) -> list[str]:
-    section = ["三、板块观察"]
+    section = ["**三、板块观察**"]
     for key in ("ai_semis", "ai_power", "commodities"):
         quotes = grouped[key]
         title = grouped[key][0].group_title if grouped[key] else key
+        section.append("")
         if not quotes:
-            section.append(f"- {title}：数据缺失")
+            section.append(f"**{title}**\n- 数据缺失")
             continue
-        section.append(f"- {title}：" + "，".join(_format_quote_inline(quote) for quote in quotes))
+        section.append(f"**{title}**")
+        section.extend(_format_inline_rows(quotes))
     return section
+
+
+def _format_inline_rows(quotes: list[AssetQuote], row_size: int = 3) -> list[str]:
+    rows = []
+    cells = [_format_quote_inline(quote) for quote in quotes]
+    for index in range(0, len(cells), row_size):
+        rows.append("- " + "　".join(cells[index : index + row_size]))
+    return rows
 
 
 def _build_market_view(grouped) -> list[str]:
@@ -142,9 +153,9 @@ def _build_market_view(grouped) -> list[str]:
 
     model_view = _infer_market_view(qqq, voo, smh, vix, tnx)
     return [
-        "四、一句话判断",
-        "数据事实：" + ("，".join(facts) + "。" if facts else "核心数据不足。"),
-        "模型判断：" + model_view,
+        "**四、一句话判断**",
+        "**数据事实**：" + ("，".join(facts) + "。" if facts else "核心数据不足。"),
+        "**模型判断**：" + model_view,
     ]
 
 
@@ -203,7 +214,7 @@ def _build_watch_points(grouped) -> list[str]:
             sector_line = "- 观察 AI 电力相对 AI 半导体的强势能否延续"
 
     return [
-        "五、下一交易日观察重点",
+        "**五、下一交易日观察重点**",
         trend_line,
         macro_line,
         sector_line,
