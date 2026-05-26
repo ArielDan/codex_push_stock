@@ -16,9 +16,9 @@ class LLMAnalysis(TypedDict):
 
 
 def generate_market_analysis(quotes) -> Optional[LLMAnalysis]:
-    api_key = os.getenv("LLM_API_KEY")
-    base_url = os.getenv("LLM_BASE_URL")
-    model = os.getenv("LLM_MODEL")
+    api_key = (os.getenv("LLM_API_KEY") or "").strip()
+    base_url = (os.getenv("LLM_BASE_URL") or "").strip()
+    model = (os.getenv("LLM_MODEL") or "").strip()
     if not api_key or not base_url or not model:
         return None
 
