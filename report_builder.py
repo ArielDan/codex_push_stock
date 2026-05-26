@@ -54,7 +54,7 @@ def quote_from_bars(asset: dict, bars, source_name: str) -> AssetQuote:
     )
 
 
-def build_report(quotes: list[AssetQuote], report_date: Optional[date]) -> str:
+def build_report(quotes: list[AssetQuote], report_date: Optional[date], model_analysis: Optional[dict] = None) -> str:
     if not report_date:
         return "【美股收盘简报｜无交易数据】\n\n昨日美股休市/无交易数据。7 天内未获取到核心 ETF 有效收盘数据。"
 
@@ -69,9 +69,9 @@ def build_report(quotes: list[AssetQuote], report_date: Optional[date]) -> str:
     lines.append("")
     lines.extend(_build_sector_section(grouped))
     lines.append("")
-    lines.extend(_build_market_view(grouped))
+    lines.extend(_build_market_view(grouped, model_analysis=model_analysis))
     lines.append("")
-    lines.extend(_build_watch_points(grouped))
+    lines.extend(_build_watch_points(grouped, model_analysis=model_analysis))
     return "\n".join(lines)
 
 
@@ -137,7 +137,7 @@ def _format_quote_row(quote: AssetQuote, include_price: bool = False) -> str:
     return f"- **{quote.ticker}** ｜ {_format_pct(quote.pct_change)}"
 
 
-def _build_market_view(grouped) -> list[str]:
+def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[str]:
     qqq = _find(grouped["core"], "QQQ")
     voo = _find(grouped["core"], "VOO")
     smh = _find(grouped["core"], "SMH")
@@ -151,12 +151,25 @@ def _build_market_view(grouped) -> list[str]:
     if tnx and tnx.close is not None:
         facts.append(f"10Y 美债约 {_display_value(tnx):.2f}%")
 
+    model_label = "模型判断"
     model_view = _infer_market_view(qqq, voo, smh, vix, tnx)
+    if model_analysis:
+        model_label = model_analysis.get("label") or model_label
+        model_view = model_analysis.get("market_view") or model_view
+        model_view = _strip_model_prefix(model_view)
     return [
         "**四、一句话判断**",
         "**数据事实**：" + ("，".join(facts) + "。" if facts else "核心数据不足。"),
-        "**模型判断**：" + model_view,
+        f"**{model_label}**：" + model_view,
     ]
+
+
+def _strip_model_prefix(text: str) -> str:
+    cleaned = text.strip()
+    for prefix in ("模型判断：", "模型判断:", "判断：", "判断:"):
+        if cleaned.startswith(prefix):
+            return cleaned[len(prefix) :].strip()
+    return cleaned
 
 
 def _infer_market_view(qqq, voo, smh, vix, tnx) -> str:
@@ -177,7 +190,12 @@ def _infer_market_view(qqq, voo, smh, vix, tnx) -> str:
     return "昨夜市场表现偏分化，指数、波动率和半导体方向没有形成单边一致信号。"
 
 
-def _build_watch_points(grouped) -> list[str]:
+def _build_watch_points(grouped, model_analysis: Optional[dict] = None) -> list[str]:
+    if model_analysis and model_analysis.get("watch_points"):
+        return ["**五、下一交易日观察重点**"] + [
+            f"- {point}" for point in model_analysis["watch_points"][:3]
+        ]
+
     qqq = _find(grouped["core"], "QQQ")
     voo = _find(grouped["core"], "VOO")
     vix = _find(grouped["macro"], "^VIX")

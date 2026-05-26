@@ -13,6 +13,7 @@ from typing import Optional
 from config import LOOKBACK_DAYS, all_assets
 from data_sources import PolygonSource, YFinanceSource
 from feishu import send_report
+from llm_analyzer import generate_market_analysis
 from report_builder import build_report, quote_from_bars
 
 
@@ -82,7 +83,12 @@ def main() -> int:
 
     quotes = fetch_quotes()
     report_date = find_report_date(quotes)
-    report = build_report(quotes, report_date)
+    model_analysis = None
+    try:
+        model_analysis = generate_market_analysis(quotes)
+    except Exception as exc:
+        logger.warning("模型分析生成失败，将使用规则判断：%s", exc)
+    report = build_report(quotes, report_date, model_analysis=model_analysis)
 
     if args.dry_run:
         print(report)

@@ -58,6 +58,20 @@ python main.py
 - Polygon 拉取失败、特殊 ticker 不支持或单个 ticker 异常时，会 fallback 到 `yfinance`。
 - 单个 ticker 拉取失败不会中断整份报告；报告会标记「数据缺失」或跳过汇总。
 
+## 模型分析
+
+「一句话判断」和「下一交易日观察重点」支持接入 OpenAI-compatible 模型 API。未配置模型时，会自动使用本地规则判断。
+
+在 `.env` 或 GitHub Secrets 中配置：
+
+```bash
+LLM_API_KEY=你的模型 API Key
+LLM_BASE_URL=https://api.example.com/v1
+LLM_MODEL=你的模型名称
+```
+
+程序会调用 `${LLM_BASE_URL}/chat/completions`。如果你的服务商给的是完整 `/chat/completions` 地址，也可以直接填完整地址。模型会返回一句行情判断和 3 条下一交易日观察重点。prompt 已限制只能基于行情数据分析，不允许编造新闻归因。
+
 ## 休市处理
 
 程序会回溯最近 7 天的有效交易数据。北京时间周一 9:00 运行时，美国仍是周日晚上，程序会自动使用上一个有效美股交易日的数据。如果 7 天内核心 ETF 都没有有效数据，会推送「昨日美股休市/无交易数据」。
