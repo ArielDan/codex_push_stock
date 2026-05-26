@@ -8,9 +8,6 @@ from datetime import date
 from statistics import mean
 from typing import Optional
 
-from config import ASSET_GROUPS
-
-
 @dataclass(frozen=True)
 class AssetQuote:
     ticker: str
@@ -82,7 +79,12 @@ def build_report(quotes: list[AssetQuote], report_date: Optional[date]) -> str:
 def _format_pct(value: Optional[float]) -> str:
     if value is None:
         return "涨跌幅缺失"
-    return f"{value:+.2f}%"
+    text = f"{value:+.2f}%"
+    if value > 0:
+        return f'<font color="red">{text}</font>'
+    if value < 0:
+        return f'<font color="green">{text}</font>'
+    return text
 
 
 def _format_quote(quote: AssetQuote) -> str:
@@ -120,7 +122,7 @@ def _build_sector_section(grouped) -> list[str]:
         leader = max(quotes, key=lambda q: q.pct_change or -999)
         laggard = min(quotes, key=lambda q: q.pct_change or 999)
         section.append(
-            f"- {title}：整体 {avg:+.2f}%，领涨 {leader.ticker} {_format_pct(leader.pct_change)}，"
+            f"- {title}：整体 {_format_pct(avg)}，领涨 {leader.ticker} {_format_pct(leader.pct_change)}，"
             f"领跌 {laggard.ticker} {_format_pct(laggard.pct_change)}"
         )
     return section
