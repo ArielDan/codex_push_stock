@@ -64,11 +64,12 @@ python main.py
 
 ## 修改或新增 ticker
 
-编辑 `config.py` 中的 `ASSET_GROUPS`：
+编辑 `watchlist.json`：
 
 - 新增资产：在对应分组的 `assets` 里添加 `ticker`、`name`、`note`。
 - 删除资产：删除对应字典。
 - 新增分组：添加一个带 `key`、`title`、`assets` 的分组对象。
+- 修改显示后缀：例如 `^TNX` 可设置 `"display_suffix": "%"`。
 
 ## GitHub Actions 部署
 

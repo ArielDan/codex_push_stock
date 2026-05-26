@@ -89,16 +89,16 @@ def _format_pct(value: Optional[float]) -> str:
 def _format_quote(quote: AssetQuote) -> str:
     if quote.close is None:
         return f"- **{quote.ticker}**：数据缺失"
-    value = _display_value(quote)
-    suffix = quote.display_suffix
-    price = f"{value:.2f}{suffix}"
+    price = _format_price(quote)
     return f"- **{quote.ticker}**：{price} ｜ {_format_pct(quote.pct_change)}"
 
 
-def _format_quote_inline(quote: AssetQuote) -> str:
+def _format_price(quote: AssetQuote) -> str:
     if quote.close is None:
-        return f"**{quote.ticker}** 数据缺失"
-    return f"**{quote.ticker}** {_format_pct(quote.pct_change)}"
+        return "数据缺失"
+    value = _display_value(quote)
+    suffix = quote.display_suffix
+    return f"{value:.2f}{suffix}"
 
 
 def _display_value(quote: AssetQuote) -> float:
@@ -108,7 +108,7 @@ def _display_value(quote: AssetQuote) -> float:
 
 
 def _build_core_section(quotes: list[AssetQuote]) -> list[str]:
-    return ["**一、核心指数 / ETF**"] + [_format_quote(quote) for quote in quotes]
+    return ["**一、核心指数 / ETF**"] + [_format_quote_row(quote, include_price=True) for quote in quotes]
 
 
 def _build_macro_section(quotes: list[AssetQuote]) -> list[str]:
@@ -125,16 +125,16 @@ def _build_sector_section(grouped) -> list[str]:
             section.append(f"**{title}**\n- 数据缺失")
             continue
         section.append(f"**{title}**")
-        section.extend(_format_inline_rows(quotes))
+        section.extend(_format_quote_row(quote) for quote in quotes)
     return section
 
 
-def _format_inline_rows(quotes: list[AssetQuote], row_size: int = 3) -> list[str]:
-    rows = []
-    cells = [_format_quote_inline(quote) for quote in quotes]
-    for index in range(0, len(cells), row_size):
-        rows.append("- " + "　".join(cells[index : index + row_size]))
-    return rows
+def _format_quote_row(quote: AssetQuote, include_price: bool = False) -> str:
+    if quote.close is None:
+        return f"- **{quote.ticker}** ｜ 数据缺失"
+    if include_price:
+        return f"- **{quote.ticker}** ｜ 收盘 {_format_price(quote)} ｜ {_format_pct(quote.pct_change)}"
+    return f"- **{quote.ticker}** ｜ {_format_pct(quote.pct_change)}"
 
 
 def _build_market_view(grouped) -> list[str]:

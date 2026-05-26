@@ -89,7 +89,7 @@ def main() -> int:
         return 0
 
     try:
-        send_report(report)
+        send_report(report, quotes=quotes, report_date=report_date)
     except Exception as exc:
         logger.error("%s", exc)
         return 1

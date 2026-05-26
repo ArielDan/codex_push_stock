@@ -1,103 +1,23 @@
-"""Tracked assets and runtime defaults for the daily market report."""
+"""Runtime defaults and watchlist loading for the daily market report."""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 LOOKBACK_DAYS = 7
 BEIJING_TIMEZONE = "Asia/Shanghai"
+WATCHLIST_PATH = Path(__file__).resolve().parent / "watchlist.json"
 
-ASSET_GROUPS = [
-    {
-        "key": "core",
-        "title": "核心指数/ETF",
-        "assets": [
-            {"ticker": "QQQ", "name": "纳指100 ETF", "note": "科技成长核心观察"},
-            {"ticker": "VOO", "name": "标普500 ETF", "note": "美股大盘核心观察"},
-            {"ticker": "DIA", "name": "道指 ETF", "note": "道指表现观察"},
-            {"ticker": "IWM", "name": "罗素2000 ETF", "note": "小盘股风险偏好"},
-            {"ticker": "SMH", "name": "半导体 ETF", "note": "半导体板块"},
-            {"ticker": "SOXX", "name": "半导体 ETF", "note": "半导体板块"},
-        ],
-    },
-    {
-        "key": "macro",
-        "title": "宏观/风险",
-        "assets": [
-            {"ticker": "^VIX", "name": "VIX", "note": "恐慌指数 / 波动率"},
-            {
-                "ticker": "^TNX",
-                "name": "10Y 美债收益率代理",
-                "note": "yfinance 的 ^TNX 通常需除以 10 理解为收益率百分比",
-                "display_suffix": "%",
-            },
-            {"ticker": "DX-Y.NYB", "name": "美元指数代理", "note": "失败则跳过或 fallback"},
-        ],
-    },
-    {
-        "key": "commodities",
-        "title": "贵金属/大宗",
-        "assets": [
-            {"ticker": "GLD", "name": "黄金 ETF", "note": "黄金"},
-            {"ticker": "SLV", "name": "白银 ETF", "note": "白银"},
-            {"ticker": "CPER", "name": "铜 ETF", "note": "铜"},
-            {"ticker": "USO", "name": "原油 ETF", "note": "原油"},
-        ],
-    },
-    {
-        "key": "ai_semis",
-        "title": "AI/半导体",
-        "assets": [
-            {"ticker": "NVDA", "name": "英伟达", "note": "AI 算力核心"},
-            {"ticker": "MU", "name": "美光", "note": "存储 / HBM 观察"},
-            {"ticker": "AMD", "name": "AMD", "note": "AI 芯片 / CPU/GPU"},
-            {"ticker": "AVGO", "name": "博通", "note": "AI 网络 / ASIC"},
-            {"ticker": "TSM", "name": "台积电", "note": "半导体制造"},
-        ],
-    },
-    {
-        "key": "ai_power",
-        "title": "AI电力/能源/光电",
-        "assets": [
-            {"ticker": "VRT", "name": "Vertiv", "note": "数据中心电力 / 散热"},
-            {"ticker": "VST", "name": "Vistra", "note": "AI 电力 / 发电"},
-            {"ticker": "CEG", "name": "Constellation Energy", "note": "核电 / 电力"},
-            {"ticker": "ETN", "name": "Eaton", "note": "电气设备"},
-            {"ticker": "GEV", "name": "GE Vernova", "note": "电力设备"},
-            {"ticker": "LITE", "name": "Lumentum", "note": "光通信"},
-            {"ticker": "COHR", "name": "Coherent", "note": "光通信 / 光模块相关"},
-        ],
-    },
-    {
-        "key": "watchlist",
-        "title": "重点观察个股",
-        "assets": [
-            {"ticker": "CRCL", "name": "Circle", "note": "稳定币 / 加密金融观察"},
-            {"ticker": "PLTR", "name": "Palantir", "note": "AI 软件"},
-            {"ticker": "HIMS", "name": "Hims & Hers", "note": "医疗消费 / 成长股"},
-            {"ticker": "OKLO", "name": "Oklo", "note": "核能小盘高波动"},
-            {"ticker": "ORCL", "name": "Oracle", "note": "云 / AI 基建"},
-        ],
-    },
-    {
-        "key": "overseas_high_vol",
-        "title": "海外/高波动观察",
-        "assets": [
-            {"ticker": "KORU", "name": "韩国相关高波动 ETF", "note": "数据源不支持则跳过"},
-        ],
-    },
-    {
-        "key": "hot_small_caps",
-        "title": "新热小股",
-        "assets": [
-            {"ticker": "SIVE", "name": "SIVE", "note": "小票，数据异常时跳过"},
-            {"ticker": "TE", "name": "TE", "note": "小票，数据异常时跳过"},
-        ],
-    },
-]
+
+def load_asset_groups() -> list[dict]:
+    with WATCHLIST_PATH.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 def all_assets() -> list[dict]:
     assets = []
-    for group in ASSET_GROUPS:
+    for group in load_asset_groups():
         for asset in group["assets"]:
             merged = dict(asset)
             merged["group_key"] = group["key"]
