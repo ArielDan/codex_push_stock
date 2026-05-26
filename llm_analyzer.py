@@ -118,8 +118,9 @@ def _clean_model_text(text: str) -> str:
 
 
 def _parse_analysis(content: str, label: str) -> LLMAnalysis:
+    json_text = _extract_json_text(content)
     try:
-        payload = json.loads(content)
+        payload = json.loads(json_text)
     except json.JSONDecodeError:
         return {
             "label": label,
@@ -139,6 +140,26 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
         "market_view": market_view,
         "watch_points": cleaned_points[:5],
     }
+
+
+def _extract_json_text(content: str) -> str:
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    if text.lower().startswith("json"):
+        text = text[4:].strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
+    return text
 
 
 def _display_model_name(model: str) -> str:

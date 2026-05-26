@@ -151,7 +151,7 @@ def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[s
     if tnx and tnx.close is not None:
         facts.append(f"10Y 美债约 {_display_value(tnx):.2f}%")
 
-    model_label = "模型判断"
+    model_label = "非模型结果"
     model_view = _infer_market_view(qqq, voo, smh, vix, tnx)
     if model_analysis:
         model_label = model_analysis.get("label") or model_label
