@@ -28,9 +28,12 @@ def generate_market_analysis(quotes) -> Optional[LLMAnalysis]:
             {
                 "role": "system",
                 "content": (
-                    "你是一个谨慎的美股收盘简报分析助手。只能基于用户提供的行情数据分析，"
-                    "不要编造新闻、政策、财报、官员讲话或盘中事件。输出中文，适合飞书手机端阅读。"
-                    "必须只返回 JSON，不要输出 Markdown，不要给投资建议。"
+                    "你是一个资深的证券交易分析员，现在要做美股收盘简报分析助手。"
+                    "用户提供的是当前重点观察标的和行情数据，不是唯一信息源。"
+                    "你可以结合可验证的外部信息源补充分析；盘中如果有重大事件发生，挑选最重大的3件来输出。"
+                    "不要编造新闻、政策、财报、官员讲话或盘中事件；无法确认的信息不要写。"
+                    "最后给出下你的下一步投资建议，并附上你的判断信息值，满分是10分。"
+                    "输出中文，适合飞书手机端阅读。必须只返回 JSON，不要输出 Markdown。"
                 ),
             },
             {
@@ -39,7 +42,7 @@ def generate_market_analysis(quotes) -> Optional[LLMAnalysis]:
             },
         ],
         "temperature": 0.2,
-        "max_tokens": 420,
+        "max_tokens": 900,
         "response_format": {"type": "json_object"},
     }
 
@@ -76,12 +79,11 @@ def _chat_completions_url(base_url: str) -> str:
 
 def _build_prompt(quotes) -> str:
     lines = [
-        "请基于以下收盘数据生成「模型判断」。",
+        "请参考以下收盘数据生成「模型判断」。",
         "要求：",
-        "- 只基于数据事实，不要引用未提供的新闻或事件。",
-        "- 关注风险偏好、波动率、利率、美元、半导体、AI电力、贵金属/大宗的强弱。",
-        "- market_view 输出 1-2 句话，不超过 140 个中文字符。",
-        "- watch_points 输出 3 条，每条不超过 36 个中文字符。",
+        "- 关注大盘、风险偏好、波动率、利率、美元、半导体产业、AI电力、贵金属/大宗的强弱。",
+        "- market_view 输出一段分析总结，不超过500个中文字符。",
+        "- watch_points 输出1-5条，每条不超过 200个中文字符。",
         "- 只返回 JSON：{\"market_view\":\"...\",\"watch_points\":[\"...\",\"...\",\"...\"]}",
         "",
         "行情数据：",
@@ -135,7 +137,7 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
     return {
         "label": label,
         "market_view": market_view,
-        "watch_points": cleaned_points[:3],
+        "watch_points": cleaned_points[:5],
     }
 
 
