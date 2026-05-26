@@ -68,8 +68,6 @@ def build_report(quotes: list[AssetQuote], report_date: Optional[date]) -> str:
     lines.append("")
     lines.extend(_build_sector_section(grouped))
     lines.append("")
-    lines.extend(_build_rank_section(quotes))
-    lines.append("")
     lines.extend(_build_market_view(grouped))
     lines.append("")
     lines.extend(_build_watch_points(grouped))
@@ -81,9 +79,9 @@ def _format_pct(value: Optional[float]) -> str:
         return "涨跌幅缺失"
     text = f"{value:+.2f}%"
     if value > 0:
-        return f'<font color="red">{text}</font>'
-    if value < 0:
         return f'<font color="green">{text}</font>'
+    if value < 0:
+        return f'<font color="red">{text}</font>'
     return text
 
 
@@ -94,6 +92,12 @@ def _format_quote(quote: AssetQuote) -> str:
     suffix = quote.display_suffix
     price = f"{value:.2f}{suffix}"
     return f"- {quote.ticker}：{price}，{_format_pct(quote.pct_change)}"
+
+
+def _format_quote_inline(quote: AssetQuote) -> str:
+    if quote.close is None:
+        return f"{quote.ticker} 数据缺失"
+    return f"{quote.ticker} {_format_pct(quote.pct_change)}"
 
 
 def _display_value(quote: AssetQuote) -> float:
@@ -113,32 +117,13 @@ def _build_macro_section(quotes: list[AssetQuote]) -> list[str]:
 def _build_sector_section(grouped) -> list[str]:
     section = ["三、板块观察"]
     for key in ("ai_semis", "ai_power", "commodities"):
-        quotes = [q for q in grouped[key] if q.pct_change is not None]
+        quotes = grouped[key]
         title = grouped[key][0].group_title if grouped[key] else key
         if not quotes:
             section.append(f"- {title}：数据缺失")
             continue
-        avg = mean(q.pct_change for q in quotes if q.pct_change is not None)
-        leader = max(quotes, key=lambda q: q.pct_change or -999)
-        laggard = min(quotes, key=lambda q: q.pct_change or 999)
-        section.append(
-            f"- {title}：整体 {_format_pct(avg)}，领涨 {leader.ticker} {_format_pct(leader.pct_change)}，"
-            f"领跌 {laggard.ticker} {_format_pct(laggard.pct_change)}"
-        )
+        section.append(f"- {title}：" + "，".join(_format_quote_inline(quote) for quote in quotes))
     return section
-
-
-def _build_rank_section(quotes: list[AssetQuote]) -> list[str]:
-    ranked = [q for q in quotes if q.pct_change is not None]
-    if not ranked:
-        return ["四、涨跌榜", "- 涨幅前三：数据缺失", "- 跌幅前三：数据缺失"]
-    winners = sorted(ranked, key=lambda q: q.pct_change or 0, reverse=True)[:3]
-    losers = sorted(ranked, key=lambda q: q.pct_change or 0)[:3]
-    return [
-        "四、涨跌榜",
-        "- 涨幅前三：" + "，".join(f"{q.ticker} {_format_pct(q.pct_change)}" for q in winners),
-        "- 跌幅前三：" + "，".join(f"{q.ticker} {_format_pct(q.pct_change)}" for q in losers),
-    ]
 
 
 def _build_market_view(grouped) -> list[str]:
@@ -157,7 +142,7 @@ def _build_market_view(grouped) -> list[str]:
 
     model_view = _infer_market_view(qqq, voo, smh, vix, tnx)
     return [
-        "五、一句话判断",
+        "四、一句话判断",
         "数据事实：" + ("，".join(facts) + "。" if facts else "核心数据不足。"),
         "模型判断：" + model_view,
     ]
@@ -218,7 +203,7 @@ def _build_watch_points(grouped) -> list[str]:
             sector_line = "- 观察 AI 电力相对 AI 半导体的强势能否延续"
 
     return [
-        "六、下一交易日观察重点",
+        "五、下一交易日观察重点",
         trend_line,
         macro_line,
         sector_line,
