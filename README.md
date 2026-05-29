@@ -89,10 +89,10 @@ LLM_MODEL=你的模型名称
 
 工作流文件位于 `.github/workflows/daily-market-report.yml`，配置如下：
 
-- 定时任务：`cron: "0 1 * * *"`，对应北京时间 9:00。
 - 支持手动触发：`workflow_dispatch`。
 - 运行 Python 3.11。
 - 安装 `requirements.txt` 后执行 `python main.py`。
+- 定时触发建议使用 cron-job.org 调用 GitHub workflow dispatch API，避免 GitHub schedule 偶发不触发。
 
 ## GitHub Secrets 配置
 
@@ -109,16 +109,35 @@ LLM_MODEL=你的模型名称
 
 进入 GitHub 仓库的 `Actions` 页面，选择 `Daily Market Report`，点击 `Run workflow`。
 
-## 修改推送时间
+## cron-job.org 定时触发
 
-编辑 `.github/workflows/daily-market-report.yml`：
+建议用 cron-job.org 每天北京时间 9:05 调用 GitHub Actions 手动触发接口。
 
-```yaml
-schedule:
-  - cron: "0 1 * * *"
+请求配置：
+
+- URL: `https://api.github.com/repos/ArielDan/codex_push_stock/actions/workflows/daily-market-report.yml/dispatches`
+- Method: `POST`
+- Timezone: `Asia/Shanghai`
+- Schedule: 每天 `09:05`
+- Headers:
+
+```text
+Authorization: Bearer <GitHub token>
+Accept: application/vnd.github+json
+Content-Type: application/json
 ```
 
-GitHub Actions 使用 UTC 时间。北京时间 = UTC + 8，例如北京时间 9:00 是 UTC 1:00。
+Body:
+
+```json
+{"ref":"main"}
+```
+
+GitHub token 建议使用 fine-grained personal access token，只授权本仓库 `Actions: Read and write`。
+
+## 修改推送时间
+
+在 cron-job.org 修改任务的执行时间即可。GitHub workflow 本身只保留 `workflow_dispatch`，不再依赖 GitHub schedule。
 
 ## 常见问题
 
