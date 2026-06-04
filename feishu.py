@@ -7,9 +7,14 @@ from datetime import date
 import json
 import os
 import re
+import time
 from typing import Optional
 
 import requests
+
+
+FEISHU_RATE_LIMIT_CODE = 11232
+FEISHU_RETRY_DELAYS = (0, 30, 60, 120)
 
 
 def build_card_payload(report: str, quotes=None, report_date: Optional[date] = None) -> dict:
@@ -305,18 +310,34 @@ def send_report(report: str, webhook: Optional[str] = None, quotes=None, report_
     if not target:
         raise RuntimeError("FEISHU_WEBHOOK 未配置；如需本地预览请使用 python main.py --dry-run 或 python3 main.py --dry-run")
 
-    response = requests.post(
-        target,
-        data=json.dumps(build_card_payload(report, quotes=quotes, report_date=report_date), ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json; charset=utf-8"},
-        timeout=20,
-    )
-    if response.status_code >= 400:
-        raise RuntimeError(f"飞书发送失败：HTTP {response.status_code} {response.text}")
+    body = json.dumps(build_card_payload(report, quotes=quotes, report_date=report_date), ensure_ascii=False).encode("utf-8")
+    last_error = None
+    for attempt, delay in enumerate(FEISHU_RETRY_DELAYS, start=1):
+        if delay:
+            print(f"WARNING: 飞书限频，等待 {delay} 秒后重试（{attempt}/{len(FEISHU_RETRY_DELAYS)}）")
+            time.sleep(delay)
 
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = {}
-    if payload.get("StatusCode", 0) not in (0, None) or payload.get("code", 0) not in (0, None):
-        raise RuntimeError(f"飞书发送失败：HTTP {response.status_code} {response.text}")
+        response = requests.post(
+            target,
+            data=body,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            timeout=20,
+        )
+        if response.status_code >= 400:
+            raise RuntimeError(f"飞书发送失败：HTTP {response.status_code} {response.text}")
+
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
+
+        status_code = payload.get("StatusCode", 0)
+        code = payload.get("code", 0)
+        if status_code in (0, None) and code in (0, None):
+            return
+
+        last_error = f"飞书发送失败：HTTP {response.status_code} {response.text}"
+        if code != FEISHU_RATE_LIMIT_CODE and "frequency limited" not in response.text:
+            raise RuntimeError(last_error)
+
+    raise RuntimeError(last_error or "飞书发送失败：飞书限频重试后仍未成功")
