@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background: #0b1116;
+  font-family: "Avenir Next", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    linear-gradient(135deg, rgba(87, 168, 199, 0.08), transparent 30%),
+    linear-gradient(315deg, rgba(215, 170, 85, 0.1), transparent 35%),
+    #0b1116;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-line p-5 shadow-terminal backdrop-blur;
+    background: rgba(16, 24, 32, 0.88);
+  }
+
+  .eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-[0.24em] text-amber;
+  }
+
+  .summary-tile {
+    @apply flex min-h-[76px] items-center gap-3 rounded-md border border-line bg-white/[0.025] p-4;
+  }
+
+  .rule-chip {
+    @apply rounded border border-line bg-white/[0.03] px-2.5 py-1.5 text-center;
+  }
+
+  .table-row {
+    transition: background 160ms ease, transform 160ms ease;
+  }
+
+  .table-row:hover {
+    background: rgba(255, 255, 255, 0.035);
+  }
+}
+
+.market-grid {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  opacity: 0.44;
+  background-image:
+    linear-gradient(rgba(178, 191, 204, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(178, 191, 204, 0.055) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+::selection {
+  background: rgba(215, 170, 85, 0.35);
+}
