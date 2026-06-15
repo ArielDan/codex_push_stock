@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, datetime
 import logging
 import os
 from pathlib import Path
 import sys
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from config import LOOKBACK_DAYS, all_assets
 from data_sources import PolygonSource, YFinanceSource
@@ -32,6 +33,7 @@ def load_dotenv_if_available() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="每日美股收盘简报飞书推送")
     parser.add_argument("--dry-run", action="store_true", help="只打印报告，不发送飞书")
+    parser.add_argument("--force", action="store_true", help="忽略周末保护，强制生成并发送报告")
     return parser.parse_args()
 
 
@@ -77,9 +79,18 @@ def find_report_date(quotes) -> Optional[date]:
     return max(core_dates)
 
 
+def is_weekend_in_china(now: Optional[datetime] = None) -> bool:
+    current = now or datetime.now(ZoneInfo("Asia/Shanghai"))
+    return current.weekday() >= 5
+
+
 def main() -> int:
     args = parse_args()
     load_dotenv_if_available()
+
+    if is_weekend_in_china() and not args.force and not args.dry_run:
+        logger.info("北京时间周末不开盘，跳过本次推送。如需测试可使用 --force。")
+        return 0
 
     quotes = fetch_quotes()
     report_date = find_report_date(quotes)

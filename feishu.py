@@ -340,4 +340,31 @@ def send_report(report: str, webhook: Optional[str] = None, quotes=None, report_
         if code != FEISHU_RATE_LIMIT_CODE and "frequency limited" not in response.text:
             raise RuntimeError(last_error)
 
-    raise RuntimeError(last_error or "飞书发送失败：飞书限频重试后仍未成功")
+    print("WARNING: 飞书卡片限频重试后仍未成功，尝试发送普通文本兜底消息")
+    fallback_error = _send_plain_text_fallback(target, report)
+    if fallback_error:
+        raise RuntimeError(f"{last_error or '飞书卡片发送失败'}；普通文本兜底也失败：{fallback_error}")
+
+
+def _send_plain_text_fallback(target: str, report: str) -> Optional[str]:
+    text = "【美股收盘简报】\n飞书卡片发送被限频，以下为文本兜底版：\n\n" + report
+    body = json.dumps({"msg_type": "text", "content": {"text": text}}, ensure_ascii=False).encode("utf-8")
+    response = requests.post(
+        target,
+        data=body,
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        timeout=20,
+    )
+    if response.status_code >= 400:
+        return f"HTTP {response.status_code} {response.text}"
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+
+    status_code = payload.get("StatusCode", 0)
+    code = payload.get("code", 0)
+    if status_code in (0, None) and code in (0, None):
+        return None
+    return f"HTTP {response.status_code} {response.text}"
