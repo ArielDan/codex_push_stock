@@ -111,7 +111,7 @@ LLM_MODEL=你的模型名称
 
 ## cron-job.org 定时触发
 
-建议用 cron-job.org 在北京时间周一到周五 9:05 调用 GitHub Actions 手动触发接口。程序内部也会跳过北京时间周六、周日，避免周末重复推送周五行情。
+建议用 cron-job.org 在北京时间周一到周五 9:05 调用 GitHub Actions 手动触发接口。程序内部也会判断本次触发是否对应新的美股收盘交易日；如果遇到美国节假日或北京时间周末，不会重复推送旧行情。
 
 请求配置：
 
@@ -139,9 +139,9 @@ GitHub token 建议使用 fine-grained personal access token，只授权本仓�
 
 在 cron-job.org 修改任务的执行时间即可。GitHub workflow 本身只保留 `workflow_dispatch`，不再依赖 GitHub schedule。
 
-## 周末和强制发送
+## 休市日和强制发送
 
-正式推送默认会跳过北京时间周六、周日。如果需要在周末测试正式发送，可以手动运行：
+正式推送默认只发送本次触发对应的新美股收盘数据。北京时间周末、美国休市日、或最新行情日期仍是旧数据时，会自动跳过。如果需要测试正式发送，可以手动运行：
 
 ```bash
 python main.py --force

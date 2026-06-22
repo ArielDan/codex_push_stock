@@ -9,12 +9,12 @@ import os
 from pathlib import Path
 import sys
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from config import LOOKBACK_DAYS, all_assets
 from data_sources import PolygonSource, YFinanceSource
 from feishu import send_report
 from llm_analyzer import generate_market_analysis
+from market_calendar import CHINA_TZ, expected_china_morning_report_date
 from report_builder import build_report, quote_from_bars
 
 
@@ -79,21 +79,22 @@ def find_report_date(quotes) -> Optional[date]:
     return max(core_dates)
 
 
-def is_weekend_in_china(now: Optional[datetime] = None) -> bool:
-    current = now or datetime.now(ZoneInfo("Asia/Shanghai"))
-    return current.weekday() >= 5
-
-
 def main() -> int:
     args = parse_args()
     load_dotenv_if_available()
 
-    if is_weekend_in_china() and not args.force and not args.dry_run:
-        logger.info("北京时间周末不开盘，跳过本次推送。如需测试可使用 --force。")
+    now = datetime.now(CHINA_TZ)
+    expected_report_date = expected_china_morning_report_date(now)
+    if expected_report_date is None and not args.force and not args.dry_run:
+        logger.info("本次触发不对应新的美股收盘交易日，跳过推送。如需测试可使用 --force。")
         return 0
 
     quotes = fetch_quotes()
     report_date = find_report_date(quotes)
+    if report_date != expected_report_date and not args.force and not args.dry_run:
+        logger.info("最新行情日期为 %s，本次应推送日期为 %s，跳过旧数据。", report_date, expected_report_date)
+        return 0
+
     model_analysis = None
     try:
         model_analysis = generate_market_analysis(quotes)
