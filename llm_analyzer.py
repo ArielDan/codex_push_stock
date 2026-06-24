@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from calendar import monthrange
+from datetime import date
 from typing import Optional, TypedDict
 
 import requests
@@ -31,9 +33,9 @@ def generate_market_analysis(quotes) -> Optional[LLMAnalysis]:
                 "content": (
                     "你是我的个人投资分析员，负责生成「每日美股收盘简报」中的模型判断、"
                     "信息补充和投资建议。"
-                    "你的任务是基于用户提供的行情数据、watchlist 分组、已确认事件、"
-                    "可验证外部信息和你的市场分析能力，判断美股收盘后的市场状态，"
-                    "补充当天最重要的市场信息，并给出下一交易日观察重点和可执行投资建议。"
+                    "你的任务不是复述涨跌流水账，而是从用户重点观察标的、行情结构、"
+                    "宏观环境、资金面/仓位线索、关键日历和可验证外部信息中，提炼对下一步交易"
+                    "真正有用的 3-5 个观察。"
                     "硬性规则："
                     "1. 必须严格区分「事实数据」和「模型判断」。"
                     "2. 用户提供的行情、涨跌幅、分组、收盘价属于事实数据；"
@@ -48,10 +50,15 @@ def generate_market_analysis(quotes) -> Optional[LLMAnalysis]:
                     "7. 投资建议必须包含：结论、依据、风险、可执行动作、信心分 1-10。"
                     "8. 重点关注但不限于：美股大盘、VIX、10Y 美债收益率、美元、AI/半导体、"
                     "AI 电力、贵金属/大宗、加密相关股票，以及这些信号对港股和 A 股基金/ETF 的影响。"
-                    "9. 输出中文，适合飞书手机端阅读，简洁、具体、克制。"
+                    "9. 增加宏观和资金面观察：风险偏好、利率/美元/流动性、信用或避险信号、"
+                    "期权波动率、CTA/系统性资金可能的仓位压力、机构月末/季末再平衡、"
+                    "CNN Fear & Greed、BofA Bull & Bear 等情绪/资金指标。"
+                    "10. 这些外部指标如果没有可靠当前数值，不要编数值；可以写成「待验证观察」或"
+                    "「需确认的资金面线索」。"
+                    "11. 输出中文，适合飞书手机端阅读，简洁、具体、克制。"
                     "分析框架：请根据当天数据和事件，自主选择最重要的分析角度。"
-                    "可参考但不限于：市场状态、主线变化、宏观环境、板块联动、异常信号、"
-                    "持仓影响、交易含义。"
+                    "可参考但不限于：市场状态、主线变化、宏观/资金环境、板块联动、异常信号、"
+                    "关键日历、持仓影响、交易含义。"
                     "输出要求：必须返回 JSON。可以在 JSON 字段中补充必要解释，但不要脱离 JSON 格式。"
                 ),
             },
@@ -97,16 +104,24 @@ def _chat_completions_url(base_url: str) -> str:
 
 
 def _build_prompt(quotes) -> str:
+    report_date = _report_date_from_quotes(quotes)
+    calendar_context = _calendar_context(report_date)
     lines = [
-        "请参考以下收盘数据生成「每日美股收盘简报」的模型判断、信息补充和投资建议。",
+        "请参考以下收盘数据生成「每日美股收盘简报」的模型判断、资金面观察和投资建议。",
+        f"报告日期：{report_date.isoformat() if report_date else '未知'}",
+        f"日历背景：{calendar_context}",
         "要求：",
-        "- 可以结合可验证外部信息补充当天最重要的市场事件。",
-        "- 补充信息必须区分 confirmed / uncertain / needs_verification。",
+        "- 不要流水账罗列涨跌；优先回答：这组信号对下一步仓位/观察/交易意味着什么。",
+        "- 必须覆盖：大盘结构、风险偏好、利率/美元、半导体和 AI 电力强弱、贵金属/大宗。",
+        "- 尽量增加宏观和资金面视角：Fear & Greed、BofA Bull & Bear、CTA 标准线/趋势仓位、期权/VIX、月末/季末再平衡、FOMC/CPI/PCE/NFP/期权到期等关键时间点。",
+        "- 如果你没有这些外部指标的可靠最新数值，不要编数值；可以写成待验证线索或观察重点。",
+        "- 可以结合可验证外部信息补充当天最重要的市场事件，最多 3 件。",
+        "- 补充信息必须区分 confirmed / uncertain / needs_verification；不确定时宁可写待验证。",
         "- 不编造新闻归因；无法确认驱动时写「未确认具体驱动」。",
         "- 事实数据和模型判断必须分离。",
-        "- 投资建议必须包含：结论、依据、风险、可执行动作、信心分 1-10。",
-        "- market_view 输出一段分析总结，不超过500个中文字符。",
-        "- watch_points 输出1-5条，每条不超过 200个中文字符。",
+        "- 投资建议必须具体，包含：结论、依据、风险、可执行动作、信心分 1-10。",
+        "- market_view 输出一段分析总结，不超过650个中文字符，必须包含宏观/资金面含义和投资建议摘要。",
+        "- watch_points 输出3-5条，每条不超过 180个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
         "- confidence 必须是 1-10 的整数。",
         "- 必须返回 JSON。",
         "- JSON 格式：",
@@ -131,6 +146,28 @@ def _build_prompt(quotes) -> str:
             f"- {quote.group_title}｜{quote.ticker}：收盘 {close:.2f}{suffix}，涨跌 {quote.pct_change:+.2f}%"
         )
     return "\n".join(lines)
+
+
+def _report_date_from_quotes(quotes) -> Optional[date]:
+    dates = [quote.date for quote in quotes if quote.date]
+    return max(dates) if dates else None
+
+
+def _calendar_context(report_date: Optional[date]) -> str:
+    if not report_date:
+        return "未获取到报告日期。"
+
+    _, last_day = monthrange(report_date.year, report_date.month)
+    days_to_month_end = last_day - report_date.day
+    context = []
+    if days_to_month_end <= 5:
+        context.append("接近月末，留意机构基金月末再平衡、CTA/风险平价调仓和期权仓位影响")
+    if report_date.month in {3, 6, 9, 12} and days_to_month_end <= 7:
+        context.append("接近季度末，留意养老金/共同基金再平衡、窗口粉饰和流动性变化")
+    if report_date.day <= 5:
+        context.append("月初阶段，留意新资金配置、非农就业数据窗口和月度宏观数据重定价")
+    context.append("若临近 FOMC、CPI、PCE、NFP、OPEX 或重大财报窗口，需要在观察重点中提示")
+    return "；".join(context)
 
 
 def _display_value(quote) -> float:
@@ -163,6 +200,9 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
         }
 
     market_view = _clean_model_text(str(payload.get("market_view", "")).strip())
+    advice = _format_investment_advice(payload.get("investment_advice"))
+    if advice and advice not in market_view:
+        market_view = f"{market_view} 建议：{advice}".strip()
     watch_points = payload.get("watch_points") or []
     cleaned_points = []
     for point in watch_points:
@@ -174,6 +214,26 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
         "market_view": market_view,
         "watch_points": cleaned_points[:5],
     }
+
+
+def _format_investment_advice(advice) -> str:
+    if not isinstance(advice, dict):
+        return ""
+
+    parts = []
+    conclusion = _single_line(str(advice.get("conclusion", "")).strip())
+    action = _single_line(str(advice.get("action", "")).strip())
+    risks = _single_line(str(advice.get("risks", "")).strip())
+    confidence = advice.get("confidence")
+    if conclusion:
+        parts.append(conclusion)
+    if action:
+        parts.append(f"动作：{action}")
+    if risks:
+        parts.append(f"风险：{risks}")
+    if confidence not in (None, ""):
+        parts.append(f"信心 {confidence}/10")
+    return "；".join(parts)
 
 
 def _extract_json_text(content: str) -> str:
