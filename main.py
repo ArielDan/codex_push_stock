@@ -86,13 +86,13 @@ def main() -> int:
     now = datetime.now(CHINA_TZ)
     expected_report_date = expected_china_morning_report_date(now)
     if expected_report_date is None and not args.force and not args.dry_run:
-        logger.info("本次触发不对应新的美股收盘交易日，跳过推送。如需测试可使用 --force。")
+        logger.info("本次触发不对应新的美股收盘交易日，已跳过飞书推送。如需测试可使用 --force。")
         return 0
 
     quotes = fetch_quotes()
     report_date = find_report_date(quotes)
     if report_date != expected_report_date and not args.force and not args.dry_run:
-        logger.info("最新行情日期为 %s，本次应推送日期为 %s，跳过旧数据。", report_date, expected_report_date)
+        logger.info("最新行情日期为 %s，本次应推送日期为 %s，已跳过旧数据飞书推送。", report_date, expected_report_date)
         return 0
 
     model_analysis = None

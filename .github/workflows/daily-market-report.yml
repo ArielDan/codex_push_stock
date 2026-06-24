@@ -2,6 +2,15 @@ name: Daily Market Report
 
 on:
   workflow_dispatch:
+    inputs:
+      force_send:
+        description: "Force send even if the report date looks stale"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   send-report:
@@ -26,4 +35,9 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
-        run: python main.py
+        run: |
+          if [ "${{ github.event.inputs.force_send }}" = "true" ]; then
+            python main.py --force
+          else
+            python main.py
+          fi
