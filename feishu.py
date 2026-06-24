@@ -77,11 +77,11 @@ def _build_native_elements(report: str, grouped) -> list[dict]:
     elements.append(_sector_table(grouped))
     elements.append({"tag": "hr"})
 
-    for title in ("四、一句话判断", "五、下一交易日观察重点"):
+    for title in ("四、模型分析", "四、一句话判断", "五、下一交易日观察重点"):
         section = section_map.get(title)
         if section:
             elements.append(_markdown_div(section))
-            if title != "五、下一交易日观察重点":
+            if title not in ("五、下一交易日观察重点",):
                 elements.append({"tag": "hr"})
     return elements
 

@@ -157,11 +157,17 @@ def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[s
         model_label = model_analysis.get("label") or model_label
         model_view = model_analysis.get("market_view") or model_view
         model_view = _strip_model_prefix(model_view)
-    return [
-        "**四、一句话判断**",
+    lines = [
+        "**四、模型分析**",
         "**数据事实**：" + ("，".join(facts) + "。" if facts else "核心数据不足。"),
         f"**{model_label}**：" + model_view,
     ]
+    if model_analysis and model_analysis.get("key_observations"):
+        lines.append("**关键观察**：")
+        lines.extend(f"- {point}" for point in model_analysis["key_observations"][:5])
+    if model_analysis and model_analysis.get("investment_advice"):
+        lines.append("**投资建议**：" + model_analysis["investment_advice"])
+    return lines
 
 
 def _strip_model_prefix(text: str) -> str:

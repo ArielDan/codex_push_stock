@@ -12,10 +12,12 @@ from typing import Optional, TypedDict
 import requests
 
 
-class LLMAnalysis(TypedDict):
+class LLMAnalysis(TypedDict, total=False):
     label: str
     market_view: str
+    key_observations: list[str]
     watch_points: list[str]
+    investment_advice: str
 
 
 def generate_market_analysis(quotes) -> Optional[LLMAnalysis]:
@@ -68,7 +70,7 @@ def generate_market_analysis(quotes) -> Optional[LLMAnalysis]:
             },
         ],
         "temperature": 0.2,
-        "max_tokens": 1400,
+        "max_tokens": 1800,
         "response_format": {"type": "json_object"},
     }
 
@@ -115,22 +117,21 @@ def _build_prompt(quotes) -> str:
         "- 必须覆盖：大盘结构、风险偏好、利率/美元、半导体和 AI 电力强弱、贵金属/大宗。",
         "- 尽量增加宏观和资金面视角：Fear & Greed、BofA Bull & Bear、CTA 标准线/趋势仓位、期权/VIX、月末/季末再平衡、FOMC/CPI/PCE/NFP/期权到期等关键时间点。",
         "- 如果你没有这些外部指标的可靠最新数值，不要编数值；可以写成待验证线索或观察重点。",
-        "- 可以结合可验证外部信息补充当天最重要的市场事件，最多 3 件。",
-        "- 补充信息必须区分 confirmed / uncertain / needs_verification；不确定时宁可写待验证。",
+        "- 可以结合可验证外部信息补充当天最重要的市场事件，最多 2 件，并直接融入 market_view 或 watch_points。",
+        "- 外部事件不确定时必须写「待验证」，不要单独展开长篇事实列表。",
         "- 不编造新闻归因；无法确认驱动时写「未确认具体驱动」。",
         "- 事实数据和模型判断必须分离。",
         "- 投资建议必须具体，包含：结论、依据、风险、可执行动作、信心分 1-10。",
-        "- market_view 输出一段分析总结，不超过650个中文字符，必须包含宏观/资金面含义和投资建议摘要。",
-        "- watch_points 输出3-5条，每条不超过 180个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
+        "- market_view 输出一段分析总结，建议 500-900 个中文字符，必须包含宏观/资金面含义。",
+        "- key_observations 输出3-5条，每条不超过 220个中文字符，用于保留重要投资观察：宏观/资金面、板块结构、待验证事件、跨市场联动、仓位含义。",
+        "- watch_points 输出3-5条，每条不超过 220个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
         "- confidence 必须是 1-10 的整数。",
-        "- 必须返回 JSON。",
+        "- 必须返回 JSON，不要 Markdown，不要代码块，不要 ```json。",
         "- JSON 格式：",
         (
-            '{"facts":["关键事实1","关键事实2"],'
-            '"supplemental_info":[{"event":"补充事件","relevance":"相关性",'
-            '"certainty":"confirmed / uncertain / needs_verification"}],'
-            '"market_view":"模型判断",'
-            '"watch_points":["观察重点1","观察重点2"],'
+            '{"market_view":"模型判断",'
+            '"key_observations":["关键观察1","关键观察2","关键观察3"],'
+            '"watch_points":["下一交易日观察重点1","下一交易日观察重点2","下一交易日观察重点3"],'
             '"investment_advice":{"conclusion":"结论","basis":"依据","risks":"风险",'
             '"action":"可执行动作","confidence":1}}'
         ),
@@ -193,27 +194,113 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
     try:
         payload = json.loads(json_text)
     except json.JSONDecodeError:
+        recovered = _recover_partial_analysis(content, label)
+        if recovered:
+            return recovered
         return {
-            "label": label,
-            "market_view": _clean_model_text(content),
+            "label": "非模型结果",
+            "market_view": "",
             "watch_points": [],
         }
 
     market_view = _clean_model_text(str(payload.get("market_view", "")).strip())
     advice = _format_investment_advice(payload.get("investment_advice"))
-    if advice and advice not in market_view:
-        market_view = f"{market_view} 建议：{advice}".strip()
+    key_observations = _clean_text_items(payload.get("key_observations") or payload.get("supplemental_info") or [])
     watch_points = payload.get("watch_points") or []
-    cleaned_points = []
-    for point in watch_points:
-        text = str(point).strip()
-        if text:
-            cleaned_points.append(text.lstrip("- ").strip())
     return {
         "label": label,
         "market_view": market_view,
-        "watch_points": cleaned_points[:5],
+        "key_observations": key_observations[:5],
+        "watch_points": _clean_text_items(watch_points)[:5],
+        "investment_advice": advice,
     }
+
+
+def _recover_partial_analysis(content: str, label: str) -> Optional[LLMAnalysis]:
+    text = _extract_json_text(content)
+    market_view = _extract_json_string_field(text, "market_view")
+    key_observations = _extract_json_string_array(text, "key_observations")
+    if not key_observations:
+        key_observations = _recover_supplemental_info(text)
+    watch_points = _extract_json_string_array(text, "watch_points")
+    advice = _recover_investment_advice(text)
+    if not market_view and not key_observations and not watch_points:
+        return None
+    return {
+        "label": label,
+        "market_view": _clean_model_text(market_view),
+        "key_observations": key_observations[:5],
+        "watch_points": watch_points[:5],
+        "investment_advice": advice,
+    }
+
+
+def _clean_text_items(items) -> list[str]:
+    cleaned = []
+    for item in items:
+        if isinstance(item, dict):
+            parts = [
+                str(item.get("event", "")).strip(),
+                str(item.get("relevance", "")).strip(),
+                str(item.get("certainty", "")).strip(),
+            ]
+            text = "；".join(part for part in parts if part)
+        else:
+            text = str(item).strip()
+        if text:
+            cleaned.append(text.lstrip("- ").strip())
+    return cleaned
+
+
+def _extract_json_string_field(text: str, field: str) -> str:
+    pattern = rf'"{re.escape(field)}"\s*:\s*"((?:\\.|[^"\\])*)'
+    match = re.search(pattern, text, flags=re.DOTALL)
+    if not match:
+        return ""
+    return _decode_json_string_fragment(match.group(1))
+
+
+def _extract_json_string_array(text: str, field: str) -> list[str]:
+    match = re.search(rf'"{re.escape(field)}"\s*:\s*\[(.*?)\]', text, flags=re.DOTALL)
+    if not match:
+        return []
+    items = re.findall(r'"((?:\\.|[^"\\])*)"', match.group(1), flags=re.DOTALL)
+    return [_decode_json_string_fragment(item).lstrip("- ").strip() for item in items if item.strip()]
+
+
+def _recover_supplemental_info(text: str) -> list[str]:
+    match = re.search(r'"supplemental_info"\s*:\s*\[(.*?)\]\s*,\s*"market_view"', text, flags=re.DOTALL)
+    if not match:
+        return []
+
+    observations = []
+    for chunk in re.findall(r"\{(.*?)\}", match.group(1), flags=re.DOTALL):
+        event = _extract_json_string_field("{" + chunk + "}", "event")
+        relevance = _extract_json_string_field("{" + chunk + "}", "relevance")
+        certainty = _extract_json_string_field("{" + chunk + "}", "certainty")
+        parts = [part for part in (event, relevance, certainty) if part]
+        if parts:
+            observations.append("；".join(parts))
+    return observations
+
+
+def _recover_investment_advice(text: str) -> str:
+    advice = {
+        "conclusion": _extract_json_string_field(text, "conclusion"),
+        "action": _extract_json_string_field(text, "action"),
+        "risks": _extract_json_string_field(text, "risks"),
+    }
+    confidence_match = re.search(r'"confidence"\s*:\s*("?)(\d+)\1', text)
+    if confidence_match:
+        advice["confidence"] = confidence_match.group(2)
+    return _format_investment_advice(advice)
+
+
+def _decode_json_string_fragment(value: str) -> str:
+    try:
+        return json.loads(f'"{value}"')
+    except json.JSONDecodeError:
+        return value.replace('\\"', '"').replace("\\n", " ")
 
 
 def _format_investment_advice(advice) -> str:
@@ -226,13 +313,13 @@ def _format_investment_advice(advice) -> str:
     risks = _single_line(str(advice.get("risks", "")).strip())
     confidence = advice.get("confidence")
     if conclusion:
-        parts.append(conclusion)
+        parts.append(f"结论：{conclusion}")
     if action:
         parts.append(f"动作：{action}")
     if risks:
         parts.append(f"风险：{risks}")
     if confidence not in (None, ""):
-        parts.append(f"信心 {confidence}/10")
+        parts.append(f"信心：{confidence}/10")
     return "；".join(parts)
 
 
