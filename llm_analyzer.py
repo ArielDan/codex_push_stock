@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Optional, TypedDict
 
 import requests
@@ -177,13 +178,9 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
 
 def _extract_json_text(content: str) -> str:
     text = content.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
+    fence_match = re.match(r"^```(?:json)?\s*(.*?)(?:```)?\s*$", text, flags=re.IGNORECASE | re.DOTALL)
+    if fence_match:
+        text = fence_match.group(1).strip()
 
     if text.lower().startswith("json"):
         text = text[4:].strip()
