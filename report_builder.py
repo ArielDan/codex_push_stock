@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
+import re
 from statistics import mean
 from typing import Optional
 
@@ -160,21 +161,37 @@ def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[s
     lines = [
         "**四、模型分析**",
         "**数据事实**：" + ("，".join(facts) + "。" if facts else "核心数据不足。"),
-        f"**{model_label}**：" + model_view,
+        "",
+        f"**{model_label}｜市场概览**",
+        model_view,
     ]
+    if model_analysis and model_analysis.get("analysis_blocks"):
+        lines.extend(["", "**重点拆解**："])
+        for block in model_analysis["analysis_blocks"][:4]:
+            title = block.get("title", "").strip()
+            text = _strip_model_prefix(block.get("text", "").strip())
+            if title and text:
+                lines.append(f"- **{title}**：{text}")
     if model_analysis and model_analysis.get("key_observations"):
-        lines.append("**关键观察**：")
-        lines.extend(f"- {point}" for point in model_analysis["key_observations"][:5])
+        lines.extend(["", "**关键观察**："])
+        lines.extend(f"- {_strip_observation_label(point)}" for point in model_analysis["key_observations"][:5])
     if model_analysis and model_analysis.get("investment_advice"):
-        lines.append("**投资建议**：" + model_analysis["investment_advice"])
+        lines.extend(["", "**投资建议**：" + model_analysis["investment_advice"]])
     return lines
 
 
 def _strip_model_prefix(text: str) -> str:
     cleaned = text.strip()
-    for prefix in ("模型判断：", "模型判断:", "判断：", "判断:"):
+    for prefix in ("【模型判断】", "[模型判断]", "模型判断：", "模型判断:", "判断：", "判断:"):
         if cleaned.startswith(prefix):
             return cleaned[len(prefix) :].strip()
+    return cleaned
+
+
+def _strip_observation_label(text: str) -> str:
+    cleaned = text.strip()
+    cleaned = re.sub(r"^【([^】]{1,18})[：:·][^】]{1,18}】\s*", r"**\1**：", cleaned)
+    cleaned = re.sub(r"^【([^】]{1,18})】\s*", r"**\1**：", cleaned)
     return cleaned
 
 

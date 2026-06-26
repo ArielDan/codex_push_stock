@@ -15,6 +15,7 @@ import requests
 class LLMAnalysis(TypedDict, total=False):
     label: str
     market_view: str
+    analysis_blocks: list[dict[str, str]]
     key_observations: list[str]
     watch_points: list[str]
     investment_advice: str
@@ -122,14 +123,16 @@ def _build_prompt(quotes) -> str:
         "- 不编造新闻归因；无法确认驱动时写「未确认具体驱动」。",
         "- 事实数据和模型判断必须分离。",
         "- 投资建议必须具体，包含：结论、依据、风险、可执行动作、信心分 1-10。",
-        "- market_view 输出一段分析总结，建议 500-900 个中文字符，必须包含宏观/资金面含义。",
-        "- key_observations 输出3-5条，每条不超过 220个中文字符，用于保留重要投资观察：宏观/资金面、板块结构、待验证事件、跨市场联动、仓位含义。",
-        "- watch_points 输出3-5条，每条不超过 220个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
+        "- market_view 输出总览，2-3句话，建议 180-320 个中文字符，不要加【模型判断】等标签。",
+        "- analysis_blocks 输出3-4个分块，每块包含 title 和 text；title 用 4-8 个中文字符，如「结构分化」「资金面」「风险信号」「跨市场」；text 不超过 180 个中文字符。",
+        "- key_observations 输出3-5条，每条不超过 180个中文字符，用于保留重要投资观察：宏观/资金面、板块结构、待验证事件、跨市场联动、仓位含义。",
+        "- watch_points 输出3-5条，每条不超过 180个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
         "- confidence 必须是 1-10 的整数。",
         "- 必须返回 JSON，不要 Markdown，不要代码块，不要 ```json。",
         "- JSON 格式：",
         (
             '{"market_view":"模型判断",'
+            '"analysis_blocks":[{"title":"结构分化","text":"分块说明"}],'
             '"key_observations":["关键观察1","关键观察2","关键观察3"],'
             '"watch_points":["下一交易日观察重点1","下一交易日观察重点2","下一交易日观察重点3"],'
             '"investment_advice":{"conclusion":"结论","basis":"依据","risks":"风险",'
@@ -205,11 +208,13 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
 
     market_view = _clean_model_text(str(payload.get("market_view", "")).strip())
     advice = _format_investment_advice(payload.get("investment_advice"))
+    analysis_blocks = _clean_analysis_blocks(payload.get("analysis_blocks") or [])
     key_observations = _clean_text_items(payload.get("key_observations") or payload.get("supplemental_info") or [])
     watch_points = payload.get("watch_points") or []
     return {
         "label": label,
         "market_view": market_view,
+        "analysis_blocks": analysis_blocks[:4],
         "key_observations": key_observations[:5],
         "watch_points": _clean_text_items(watch_points)[:5],
         "investment_advice": advice,
@@ -219,6 +224,7 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
 def _recover_partial_analysis(content: str, label: str) -> Optional[LLMAnalysis]:
     text = _extract_json_text(content)
     market_view = _extract_json_string_field(text, "market_view")
+    analysis_blocks = _recover_analysis_blocks(text)
     key_observations = _extract_json_string_array(text, "key_observations")
     if not key_observations:
         key_observations = _recover_supplemental_info(text)
@@ -229,10 +235,23 @@ def _recover_partial_analysis(content: str, label: str) -> Optional[LLMAnalysis]
     return {
         "label": label,
         "market_view": _clean_model_text(market_view),
+        "analysis_blocks": analysis_blocks[:4],
         "key_observations": key_observations[:5],
         "watch_points": watch_points[:5],
         "investment_advice": advice,
     }
+
+
+def _clean_analysis_blocks(items) -> list[dict[str, str]]:
+    blocks = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = _single_line(str(item.get("title", "")).strip())
+        text = _clean_model_text(str(item.get("text", "")).strip())
+        if title and text:
+            blocks.append({"title": title, "text": text})
+    return blocks
 
 
 def _clean_text_items(items) -> list[str]:
@@ -266,6 +285,20 @@ def _extract_json_string_array(text: str, field: str) -> list[str]:
         return []
     items = re.findall(r'"((?:\\.|[^"\\])*)"', match.group(1), flags=re.DOTALL)
     return [_decode_json_string_fragment(item).lstrip("- ").strip() for item in items if item.strip()]
+
+
+def _recover_analysis_blocks(text: str) -> list[dict[str, str]]:
+    match = re.search(r'"analysis_blocks"\s*:\s*\[(.*?)\]\s*,\s*"key_observations"', text, flags=re.DOTALL)
+    if not match:
+        return []
+
+    blocks = []
+    for chunk in re.findall(r"\{(.*?)\}", match.group(1), flags=re.DOTALL):
+        title = _extract_json_string_field("{" + chunk + "}", "title")
+        block_text = _extract_json_string_field("{" + chunk + "}", "text")
+        if title and block_text:
+            blocks.append({"title": title, "text": _clean_model_text(block_text)})
+    return blocks
 
 
 def _recover_supplemental_info(text: str) -> list[str]:
