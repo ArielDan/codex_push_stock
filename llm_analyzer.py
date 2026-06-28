@@ -16,7 +16,6 @@ class LLMAnalysis(TypedDict, total=False):
     label: str
     facts: list[str]
     market_view: str
-    analysis_blocks: list[dict[str, str]]
     supplemental_info: list[str]
     key_observations: list[str]
     watch_points: list[str]
@@ -125,10 +124,10 @@ def _build_prompt(quotes) -> str:
         "- 不编造新闻归因；无法确认驱动时写「未确认具体驱动」。",
         "- 事实数据和模型判断必须分离。",
         "- 投资建议必须具体，包含：结论、依据、风险、可执行动作、信心分 1-10。",
-        "- market_view 输出总览，建议 400-700 个中文字符，不要加【模型判断】等标签。",
-        "- analysis_blocks 必须输出5个分块，每块包含 title 和 text；title 用 4-8 个中文字符，如「结构分化」「资金面」「风险信号」「跨市场」「交易含义」；text 120-260 个中文字符。",
-        "- key_observations 必须输出5条，每条 100-220 个中文字符，用于保留重要投资观察：宏观/资金面、板块结构、待验证事件、跨市场联动、仓位含义。",
-        "- watch_points 必须输出4-5条，每条 100-220 个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
+        "- market_view 输出完整市场判断，建议 700-1200 个中文字符，不要加【模型判断】等标签；必须保留足够信息量，覆盖结构分化、宏观/资金面、风险信号、跨市场联动和交易含义。",
+        "- key_observations 必须输出5条，每条 160-300 个中文字符；每条都要包含「信号/判断/行动含义」，不能只列事实。",
+        "- key_observations 的推荐格式：\"【主题】信号：...；判断：...；行动含义：...\"。",
+        "- watch_points 必须输出4-5条，每条 120-240 个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
         "- investment_advice 必须完整填写 conclusion、basis、risks、action、confidence，不得为空。",
         "- 所有 JSON 字段都必须有实际内容；不要只返回 market_view。",
         "- confidence 必须是 1-10 的整数。",
@@ -137,7 +136,6 @@ def _build_prompt(quotes) -> str:
         (
             '{"facts":["事实1","事实2"],'
             '"market_view":"模型判断",'
-            '"analysis_blocks":[{"title":"结构分化","text":"分块说明"}],'
             '"supplemental_info":[{"event":"事件","relevance":"相关性","certainty":"confirmed/uncertain/needs_verification"}],'
             '"key_observations":["关键观察1","关键观察2","关键观察3"],'
             '"watch_points":["下一交易日观察重点1","下一交易日观察重点2","下一交易日观察重点3"],'
@@ -215,17 +213,16 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
     facts = _clean_text_items(payload.get("facts") or [])
     market_view = _clean_model_text(str(payload.get("market_view", "")).strip())
     advice = _format_investment_advice(payload.get("investment_advice"))
-    analysis_blocks = _clean_analysis_blocks(payload.get("analysis_blocks") or [])
     supplemental_info = _clean_text_items(payload.get("supplemental_info") or [])
     key_observations = _clean_text_items(payload.get("key_observations") or [])
     watch_points = payload.get("watch_points") or []
+    merged_observations = _merge_key_observations(key_observations, supplemental_info, facts)
     return {
         "label": label,
         "facts": facts[:8],
         "market_view": market_view,
-        "analysis_blocks": analysis_blocks[:4],
         "supplemental_info": supplemental_info[:5],
-        "key_observations": key_observations[:5],
+        "key_observations": merged_observations[:7],
         "watch_points": _clean_text_items(watch_points)[:5],
         "investment_advice": advice,
     }
@@ -235,7 +232,6 @@ def _recover_partial_analysis(content: str, label: str) -> Optional[LLMAnalysis]
     text = _extract_json_text(content)
     facts = _extract_json_string_array(text, "facts")
     market_view = _extract_json_string_field(text, "market_view")
-    analysis_blocks = _recover_analysis_blocks(text)
     key_observations = _extract_json_string_array(text, "key_observations")
     supplemental_info = _recover_supplemental_info(text)
     watch_points = _extract_json_string_array(text, "watch_points")
@@ -246,24 +242,23 @@ def _recover_partial_analysis(content: str, label: str) -> Optional[LLMAnalysis]
         "label": label,
         "facts": facts[:8],
         "market_view": _clean_model_text(market_view),
-        "analysis_blocks": analysis_blocks[:4],
         "supplemental_info": supplemental_info[:5],
-        "key_observations": key_observations[:5],
+        "key_observations": _merge_key_observations(key_observations, supplemental_info, facts)[:7],
         "watch_points": watch_points[:5],
         "investment_advice": advice,
     }
 
 
-def _clean_analysis_blocks(items) -> list[dict[str, str]]:
-    blocks = []
-    for item in items:
-        if not isinstance(item, dict):
+def _merge_key_observations(key_observations: list[str], supplemental_info: list[str], facts: list[str]) -> list[str]:
+    merged = []
+    seen = set()
+    for item in [*key_observations, *supplemental_info, *facts]:
+        cleaned = _single_line(item).strip()
+        if not cleaned or cleaned in seen:
             continue
-        title = _single_line(str(item.get("title", "")).strip())
-        text = _clean_model_text(str(item.get("text", "")).strip())
-        if title and text:
-            blocks.append({"title": title, "text": text})
-    return blocks
+        seen.add(cleaned)
+        merged.append(cleaned)
+    return merged
 
 
 def _clean_text_items(items) -> list[str]:
