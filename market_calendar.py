@@ -13,9 +13,6 @@ NY_TZ = ZoneInfo("America/New_York")
 def expected_china_morning_report_date(now: datetime) -> date | None:
     """Return the US session that a China morning run is allowed to send."""
     china_now = now.astimezone(CHINA_TZ)
-    if china_now.weekday() >= 5:
-        return None
-
     ny_date = china_now.astimezone(NY_TZ).date()
     if not is_trading_day(ny_date):
         return None
