@@ -173,6 +173,9 @@ def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[s
         f"**{model_label}**：",
         model_view,
     ]
+    if model_analysis and model_analysis.get("macro_fund_flows"):
+        lines.extend(["", "**宏观/资金面**："])
+        lines.extend(f"- {item}" for item in model_analysis["macro_fund_flows"][:5])
     if model_analysis and model_analysis.get("investment_advice"):
         lines.extend(["", "**投资建议**：" + model_analysis["investment_advice"]])
     return lines
