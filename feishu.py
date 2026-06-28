@@ -75,6 +75,10 @@ def _build_native_elements(report: str, grouped) -> list[dict]:
 
     elements.append(_markdown_div("**三、板块观察**"))
     elements.append(_sector_table(grouped))
+    sector = section_map.get("三、板块观察")
+    sector_insights = _extract_section_tail(sector, "**板块洞察**") if sector else ""
+    if sector_insights:
+        elements.append(_markdown_div(sector_insights))
     elements.append({"tag": "hr"})
 
     for title in ("四、模型分析", "四、一句话判断", "五、下一交易日观察重点"):
@@ -275,6 +279,14 @@ def _find_quote(quotes, ticker: str):
 def _section_title(section: str) -> str:
     first_line = section.splitlines()[0].strip()
     return first_line.strip("*")
+
+
+def _extract_section_tail(section: str, marker: str) -> str:
+    lines = section.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == marker:
+            return "\n".join(lines[index:]).strip()
+    return ""
 
 
 def _split_title(report: str) -> tuple[str, str]:

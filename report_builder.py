@@ -68,7 +68,7 @@ def build_report(quotes: list[AssetQuote], report_date: Optional[date], model_an
     lines.append("")
     lines.extend(_build_macro_section(grouped["macro"]))
     lines.append("")
-    lines.extend(_build_sector_section(grouped))
+    lines.extend(_build_sector_section(grouped, model_analysis=model_analysis))
     lines.append("")
     lines.extend(_build_market_view(grouped, model_analysis=model_analysis))
     lines.append("")
@@ -116,7 +116,7 @@ def _build_macro_section(quotes: list[AssetQuote]) -> list[str]:
     return ["**二、宏观 / 风险**"] + [_format_quote(quote) for quote in quotes]
 
 
-def _build_sector_section(grouped) -> list[str]:
+def _build_sector_section(grouped, model_analysis: Optional[dict] = None) -> list[str]:
     section = ["**三、板块观察**"]
     for key in ("ai_semis", "ai_power", "commodities"):
         quotes = grouped[key]
@@ -127,6 +127,14 @@ def _build_sector_section(grouped) -> list[str]:
             continue
         section.append(f"**{title}**")
         section.extend(_format_quote_row(quote) for quote in quotes)
+    if model_analysis and model_analysis.get("sector_insights"):
+        section.append("")
+        section.append("**板块洞察**")
+        for item in model_analysis["sector_insights"][:3]:
+            sector = item.get("sector", "").strip()
+            insight = item.get("insight", "").strip()
+            if sector and insight:
+                section.append(f"- **{sector}**：{insight}")
     return section
 
 
@@ -165,9 +173,6 @@ def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[s
         f"**{model_label}**：",
         model_view,
     ]
-    if model_analysis and model_analysis.get("key_observations"):
-        lines.extend(["", "**关键观察**："])
-        lines.extend(f"- {_strip_observation_label(point)}" for point in model_analysis["key_observations"][:7])
     if model_analysis and model_analysis.get("investment_advice"):
         lines.extend(["", "**投资建议**：" + model_analysis["investment_advice"]])
     return lines

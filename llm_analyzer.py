@@ -18,6 +18,7 @@ class LLMAnalysis(TypedDict, total=False):
     market_view: str
     supplemental_info: list[str]
     key_observations: list[str]
+    sector_insights: list[dict[str, str]]
     watch_points: list[str]
     investment_advice: str
 
@@ -125,8 +126,8 @@ def _build_prompt(quotes) -> str:
         "- 事实数据和模型判断必须分离。",
         "- 投资建议必须具体，包含：结论、依据、风险、可执行动作、信心分 1-10。",
         "- market_view 输出完整市场判断，建议 700-1200 个中文字符，不要加【模型判断】等标签；必须保留足够信息量，覆盖结构分化、宏观/资金面、风险信号、跨市场联动和交易含义。",
-        "- key_observations 必须输出5条，每条 160-300 个中文字符；每条都要包含「信号/判断/行动含义」，不能只列事实。",
-        "- key_observations 的推荐格式：\"【主题】信号：...；判断：...；行动含义：...\"。",
+        "- sector_insights 必须输出3条，分别对应「AI/半导体」「AI电力」「贵金属/大宗」；每条包含 sector 和 insight。",
+        "- sector_insights 的 insight 必须解释该板块表格背后的投资含义，包含「信号/判断/行动含义」，不能只列涨跌事实。",
         "- watch_points 必须输出4-5条，每条 120-240 个中文字符，至少 1 条是宏观/资金面或关键日历观察。",
         "- investment_advice 必须完整填写 conclusion、basis、risks、action、confidence，不得为空。",
         "- 所有 JSON 字段都必须有实际内容；不要只返回 market_view。",
@@ -137,7 +138,7 @@ def _build_prompt(quotes) -> str:
             '{"facts":["事实1","事实2"],'
             '"market_view":"模型判断",'
             '"supplemental_info":[{"event":"事件","relevance":"相关性","certainty":"confirmed/uncertain/needs_verification"}],'
-            '"key_observations":["关键观察1","关键观察2","关键观察3"],'
+            '"sector_insights":[{"sector":"AI/半导体","insight":"信号：...；判断：...；行动含义：..."}],'
             '"watch_points":["下一交易日观察重点1","下一交易日观察重点2","下一交易日观察重点3"],'
             '"investment_advice":{"conclusion":"结论","basis":"依据","risks":"风险",'
             '"action":"可执行动作","confidence":1}}'
@@ -215,6 +216,7 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
     advice = _format_investment_advice(payload.get("investment_advice"))
     supplemental_info = _clean_text_items(payload.get("supplemental_info") or [])
     key_observations = _clean_text_items(payload.get("key_observations") or [])
+    sector_insights = _clean_sector_insights(payload.get("sector_insights") or [])
     watch_points = payload.get("watch_points") or []
     merged_observations = _merge_key_observations(key_observations, supplemental_info, facts)
     return {
@@ -223,6 +225,7 @@ def _parse_analysis(content: str, label: str) -> LLMAnalysis:
         "market_view": market_view,
         "supplemental_info": supplemental_info[:5],
         "key_observations": merged_observations[:7],
+        "sector_insights": sector_insights[:3],
         "watch_points": _clean_text_items(watch_points)[:5],
         "investment_advice": advice,
     }
@@ -233,6 +236,7 @@ def _recover_partial_analysis(content: str, label: str) -> Optional[LLMAnalysis]
     facts = _extract_json_string_array(text, "facts")
     market_view = _extract_json_string_field(text, "market_view")
     key_observations = _extract_json_string_array(text, "key_observations")
+    sector_insights = _recover_sector_insights(text)
     supplemental_info = _recover_supplemental_info(text)
     watch_points = _extract_json_string_array(text, "watch_points")
     advice = _recover_investment_advice(text)
@@ -244,6 +248,7 @@ def _recover_partial_analysis(content: str, label: str) -> Optional[LLMAnalysis]
         "market_view": _clean_model_text(market_view),
         "supplemental_info": supplemental_info[:5],
         "key_observations": _merge_key_observations(key_observations, supplemental_info, facts)[:7],
+        "sector_insights": sector_insights[:3],
         "watch_points": watch_points[:5],
         "investment_advice": advice,
     }
@@ -259,6 +264,18 @@ def _merge_key_observations(key_observations: list[str], supplemental_info: list
         seen.add(cleaned)
         merged.append(cleaned)
     return merged
+
+
+def _clean_sector_insights(items) -> list[dict[str, str]]:
+    insights = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        sector = _single_line(str(item.get("sector", "")).strip())
+        insight = _single_line(str(item.get("insight", "")).strip())
+        if sector and insight:
+            insights.append({"sector": sector, "insight": insight})
+    return insights
 
 
 def _clean_text_items(items) -> list[str]:
@@ -293,6 +310,20 @@ def _extract_json_string_array(text: str, field: str) -> list[str]:
         return []
     items = re.findall(r'"((?:\\.|[^"\\])*)"', match.group(1), flags=re.DOTALL)
     return [_decode_json_string_fragment(item).lstrip("- ").strip() for item in items if item.strip()]
+
+
+def _recover_sector_insights(text: str) -> list[dict[str, str]]:
+    match = re.search(r'"sector_insights"\s*:\s*\[(.*?)\]\s*,\s*"watch_points"', text, flags=re.DOTALL)
+    if not match:
+        return []
+
+    insights = []
+    for chunk in re.findall(r"\{(.*?)\}", match.group(1), flags=re.DOTALL):
+        sector = _extract_json_string_field("{" + chunk + "}", "sector")
+        insight = _extract_json_string_field("{" + chunk + "}", "insight")
+        if sector and insight:
+            insights.append({"sector": sector, "insight": _single_line(insight)})
+    return insights
 
 
 def _recover_analysis_blocks(text: str) -> list[dict[str, str]]:
