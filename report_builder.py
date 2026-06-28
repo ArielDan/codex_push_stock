@@ -165,6 +165,9 @@ def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[s
         f"**{model_label}｜市场概览**",
         model_view,
     ]
+    if model_analysis and model_analysis.get("facts"):
+        lines.extend(["", "**模型补充事实**："])
+        lines.extend(f"- {point}" for point in model_analysis["facts"][:8])
     if model_analysis and model_analysis.get("analysis_blocks"):
         lines.extend(["", "**重点拆解**："])
         for block in model_analysis["analysis_blocks"][:4]:
@@ -172,6 +175,9 @@ def _build_market_view(grouped, model_analysis: Optional[dict] = None) -> list[s
             text = _strip_model_prefix(block.get("text", "").strip())
             if title and text:
                 lines.append(f"- **{title}**：{text}")
+    if model_analysis and model_analysis.get("supplemental_info"):
+        lines.extend(["", "**事件 / 信息验证**："])
+        lines.extend(f"- {_strip_observation_label(point)}" for point in model_analysis["supplemental_info"][:5])
     if model_analysis and model_analysis.get("key_observations"):
         lines.extend(["", "**关键观察**："])
         lines.extend(f"- {_strip_observation_label(point)}" for point in model_analysis["key_observations"][:5])
@@ -216,7 +222,7 @@ def _infer_market_view(qqq, voo, smh, vix, tnx) -> str:
 def _build_watch_points(grouped, model_analysis: Optional[dict] = None) -> list[str]:
     if model_analysis and model_analysis.get("watch_points"):
         return ["**五、下一交易日观察重点**"] + [
-            f"- {point}" for point in model_analysis["watch_points"][:3]
+            f"- {point}" for point in model_analysis["watch_points"][:5]
         ]
 
     qqq = _find(grouped["core"], "QQQ")
