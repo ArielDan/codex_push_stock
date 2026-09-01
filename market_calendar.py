@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 NY_TZ = ZoneInfo("America/New_York")
+OPEN_WATCH_START = time(9, 58)
+OPEN_WATCH_END = time(10, 12)
+
+
+@dataclass(frozen=True)
+class OpenWatchWindow:
+    ny_now: datetime
+    is_trading_day: bool
+    in_window: bool
+    session_date: date
+    window_start: datetime
+    window_end: datetime
 
 
 def expected_china_morning_report_date(now: datetime) -> date | None:
@@ -28,6 +41,23 @@ def previous_trading_day(day: date) -> date:
 
 def is_trading_day(day: date) -> bool:
     return day.weekday() < 5 and day not in nyse_holidays(day.year)
+
+
+def open_watch_window_status(now: datetime) -> OpenWatchWindow:
+    """Return whether a run is inside the US open +30 minute watch window."""
+    ny_now = now.astimezone(NY_TZ)
+    session_date = ny_now.date()
+    window_start = datetime.combine(session_date, OPEN_WATCH_START, tzinfo=NY_TZ)
+    window_end = datetime.combine(session_date, OPEN_WATCH_END, tzinfo=NY_TZ)
+    trading_day = is_trading_day(session_date)
+    return OpenWatchWindow(
+        ny_now=ny_now,
+        is_trading_day=trading_day,
+        in_window=trading_day and window_start <= ny_now <= window_end,
+        session_date=session_date,
+        window_start=window_start,
+        window_end=window_end,
+    )
 
 
 def nyse_holidays(year: int) -> set[date]:

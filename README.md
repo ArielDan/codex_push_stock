@@ -30,6 +30,54 @@ python main.py --dry-run
 
 `--dry-run` 只打印报告内容，不发送飞书，也不要求配置 `FEISHU_WEBHOOK`，适合本地调试数据和格式。
 
+## 美股开盘 30 分钟观察
+
+开盘观察用于在美股常规开盘后约 30 分钟生成盘中走势、技术判断和观察型操作建议，并通过飞书推送。
+
+本功能不影响原有收盘日报。默认运行 `python main.py` 仍然是收盘日报，只有显式添加 `--open-watch` 才会进入开盘观察。
+
+检查当前是否处于开盘观察窗口：
+
+```bash
+python main.py --open-watch --check-window
+```
+
+本地预览，不发送飞书：
+
+```bash
+python main.py --open-watch --dry-run
+```
+
+本地预览并写入 JSON：
+
+```bash
+python main.py --open-watch --dry-run --write-output
+```
+
+强制生成并发送飞书，用于测试：
+
+```bash
+python main.py --open-watch --force-send
+```
+
+强制发送并写入 JSON：
+
+```bash
+python main.py --open-watch --force-send --write-output
+```
+
+开盘观察窗口使用纽约时间判断，不写死北京时间。当前允许窗口为纽约时间 09:58-10:12，覆盖美股夏令时和冬令时差异。非交易日或不在窗口内会正常退出，不报错。
+
+## 开盘观察 JSON 输出
+
+添加 `--write-output` 后会写入：
+
+- `data/open_watch/latest.json`
+- `data/open_watch/reports/YYYY-MM-DD.json`
+- `data/open_watch/index.json`
+
+`--dry-run` 默认不写文件，除非显式加 `--write-output`。
+
 ## 飞书 Webhook 配置
 
 1. 在飞书群中添加「自定义机器人」。
@@ -76,14 +124,17 @@ LLM_MODEL=你的模型名称
 
 程序会回溯最近 7 天的有效交易数据。正式定时推送只在「北京时间触发时对应的纽约日期是美股交易日」才发送，避免周日/周一重复推送上周五行情。如果 7 天内核心 ETF 都没有有效数据，会推送「昨日美股休市/无交易数据」。
 
-## 修改或新增 ticker
+## 如何维护 watchlist.json
 
 编辑 `watchlist.json`：
 
 - 新增资产：在对应分组的 `assets` 里添加 `ticker`、`name`、`note`。
 - 删除资产：删除对应字典。
 - 新增分组：添加一个带 `key`、`title`、`assets` 的分组对象。
+- 调整展示顺序：直接调整分组顺序或分组内 `assets` 顺序；收盘日报、开盘观察、JSON 输出和飞书推送都会按这个顺序展示。
 - 修改显示后缀：例如 `^TNX` 可设置 `"display_suffix": "%"`。
+
+`watchlist.json` 是唯一观察资产配置源。不要新增 YAML watchlist，也不要把 ticker 写死在 Python 代码里。
 
 ## GitHub Actions 部署
 
@@ -93,6 +144,15 @@ LLM_MODEL=你的模型名称
 - 运行 Python 3.11。
 - 安装 `requirements.txt` 后执行 `python main.py`。
 - 定时触发建议使用 cron-job.org 调用 GitHub workflow dispatch API，避免 GitHub schedule 偶发不触发。
+
+开盘观察工作流位于 `.github/workflows/open-watch.yml`，配置如下：
+
+- 支持手动触发：`workflow_dispatch`。
+- 支持 `force_send` 和 `write_output` 输入参数。
+- 运行 Python 3.11。
+- 安装 `requirements.txt` 后执行 `python main.py --open-watch`。
+- GitHub schedule 同时保留 `14:00 UTC` 和 `15:00 UTC` 两个触发，由代码内部判断纽约时间窗口，适配夏令时/冬令时。
+- 如果 `data/open_watch/` 有变化，会自动 commit 并 push；没有变化则不提交。
 
 ## GitHub Secrets 配置
 
@@ -104,10 +164,35 @@ LLM_MODEL=你的模型名称
 
 - `FEISHU_WEBHOOK`：必填，飞书自定义机器人 Webhook。
 - `POLYGON_API_KEY`：可选，Polygon/Massive API Key。
+- `LLM_API_KEY`：可选，模型 API Key。
+- `LLM_BASE_URL`：可选，OpenAI-compatible API Base URL。
+- `LLM_MODEL`：可选，模型名称。
 
 ## 手动触发 GitHub Actions
 
 进入 GitHub 仓库的 `Actions` 页面，选择 `Daily Market Report`，点击 `Run workflow`。
+
+开盘观察手动触发：
+
+1. 进入 GitHub 仓库的 `Actions` 页面。
+2. 选择 `Open Watch`。
+3. 点击 `Run workflow`。
+4. 测试发送时可选择 `force_send=true`。
+5. 需要写入 JSON 时选择 `write_output=true`。
+
+## docs 跨设备接续
+
+`docs/` 目录用于跨电脑接续项目上下文：
+
+- `docs/investment-analyst-playbook.md`：投资分析框架。
+- `docs/codex-progress.md`：开发进展、修改文件、验证结果、已知问题和下一步。
+- `docs/decisions.md`：关键技术和产品决策。
+- `docs/todo.md`：P0/P1/P2 待办。
+- `docs/runbook.md`：本地运行、Actions 测试和常见报错。
+
+## H5 Dashboard
+
+当前项目只实现飞书推送和 JSON 沉淀。H5 Dashboard 暂不实现，也不新增 `frontend/`。后续如果需要 review 页面，再单独新增前端能力。
 
 ## cron-job.org 定时触发
 

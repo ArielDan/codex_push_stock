@@ -1,0 +1,74 @@
+name: Open Watch
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_send:
+        description: "Force send even when outside the open watch window"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      write_output:
+        description: "Write data/open_watch JSON outputs"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  schedule:
+    - cron: "0 14 * * 1-5"
+    - cron: "0 15 * * 1-5"
+
+permissions:
+  contents: write
+
+jobs:
+  open-watch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run open watch
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+        run: |
+          ARGS="--open-watch"
+          if [ "${{ github.event.inputs.force_send }}" = "true" ]; then
+            ARGS="$ARGS --force-send"
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.write_output }}" = "true" ]; then
+            ARGS="$ARGS --write-output"
+          fi
+          python main.py $ARGS
+
+      - name: Commit open watch JSON outputs
+        run: |
+          if git diff --quiet -- data/open_watch; then
+            echo "No open watch output changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/open_watch
+          git commit -m "Update open watch data"
+          git push

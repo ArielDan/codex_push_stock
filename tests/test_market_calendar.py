@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import unittest
 
-from market_calendar import expected_china_morning_report_date
+from market_calendar import expected_china_morning_report_date, open_watch_window_status
 
 
 class MarketCalendarTest(unittest.TestCase):
@@ -29,6 +29,26 @@ class MarketCalendarTest(unittest.TestCase):
         self.assert_expected("2026-09-09 09:05", "2026-09-08")
         self.assert_expected("2026-12-26 09:05", None)
         self.assert_expected("2026-12-29 09:05", "2026-12-28")
+
+    def test_open_watch_window_uses_new_york_time_in_dst(self) -> None:
+        now = datetime.strptime("2026-06-23 22:00", "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        status = open_watch_window_status(now)
+        self.assertEqual(status.ny_now.strftime("%Y-%m-%d %H:%M"), "2026-06-23 10:00")
+        self.assertTrue(status.is_trading_day)
+        self.assertTrue(status.in_window)
+
+    def test_open_watch_window_uses_new_york_time_in_standard_time(self) -> None:
+        now = datetime.strptime("2026-12-15 23:00", "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        status = open_watch_window_status(now)
+        self.assertEqual(status.ny_now.strftime("%Y-%m-%d %H:%M"), "2026-12-15 10:00")
+        self.assertTrue(status.is_trading_day)
+        self.assertTrue(status.in_window)
+
+    def test_open_watch_skips_weekend(self) -> None:
+        now = datetime.strptime("2026-06-28 22:00", "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        status = open_watch_window_status(now)
+        self.assertFalse(status.is_trading_day)
+        self.assertFalse(status.in_window)
 
 
 if __name__ == "__main__":

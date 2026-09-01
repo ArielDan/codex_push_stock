@@ -358,6 +358,10 @@ def send_report(report: str, webhook: Optional[str] = None, quotes=None, report_
         raise RuntimeError(f"{last_error or '飞书卡片发送失败'}；普通文本兜底也失败：{fallback_error}")
 
 
+def send_open_watch_report(report: str, webhook: Optional[str] = None) -> None:
+    send_report(report, webhook=webhook)
+
+
 def _send_plain_text_fallback(target: str, report: str) -> Optional[str]:
     text = "【美股收盘简报】\n飞书卡片发送被限频，以下为文本兜底版：\n\n" + report
     body = json.dumps({"msg_type": "text", "content": {"text": text}}, ensure_ascii=False).encode("utf-8")
