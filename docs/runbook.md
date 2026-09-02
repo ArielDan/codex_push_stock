@@ -63,3 +63,12 @@ permissions:
 ```
 
 并确认 `write_output=true` 或 schedule 触发时确实产生了 `data/open_watch/` 文件变化。
+
+## 收盘日报定时
+
+收盘日报有两层触发：
+
+- cron-job.org：北京时间周二到周六 09:05 调用 `Daily Market Report`。
+- GitHub schedule：北京时间周二到周六约 09:12 兜底触发。
+
+正式 workflow 会在飞书发送成功后更新 `data/daily_market/latest_sent.json`。如果两层触发都运行，后运行的一次会看到同一报告日期已经发送过，并跳过重复推送。

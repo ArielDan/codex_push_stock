@@ -11,6 +11,15 @@ on:
         options:
           - "false"
           - "true"
+  schedule:
+    - cron: "12 1 * * 2-6"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-market-report
+  cancel-in-progress: false
 
 jobs:
   send-report:
@@ -19,6 +28,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,5 +50,17 @@ jobs:
           if [ "${{ github.event.inputs.force_send }}" = "true" ]; then
             python main.py --force
           else
-            python main.py
+            python main.py --write-sent-state
           fi
+
+      - name: Commit sent state
+        run: |
+          if git diff --quiet -- data/daily_market; then
+            echo "No daily sent state changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/daily_market
+          git commit -m "Update daily market sent state"
+          git push

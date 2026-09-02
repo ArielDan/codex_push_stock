@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, datetime
+import json
 import logging
 import os
 from pathlib import Path
@@ -27,6 +28,7 @@ from report_builder import build_report, quote_from_bars
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+DAILY_SENT_STATE_PATH = Path(__file__).resolve().parent / "data" / "daily_market" / "latest_sent.json"
 
 
 def load_dotenv_if_available() -> None:
@@ -41,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="每日美股收盘简报飞书推送")
     parser.add_argument("--dry-run", action="store_true", help="只打印报告，不发送飞书")
     parser.add_argument("--force", action="store_true", help="忽略周末保护，强制生成并发送报告")
+    parser.add_argument("--write-sent-state", action="store_true", help="收盘日报：发送成功后写入已发送日期状态")
     parser.add_argument("--open-watch", action="store_true", help="运行美股开盘后 30 分钟观察")
     parser.add_argument("--check-window", action="store_true", help="只检查开盘观察运行窗口，不拉行情、不发送飞书")
     parser.add_argument("--force-send", action="store_true", help="开盘观察：忽略时间窗口，强制生成并发送")
@@ -102,6 +105,15 @@ def main() -> int:
     if expected_report_date is None and not args.force and not args.dry_run:
         logger.info("本次触发不对应新的美股收盘交易日，已跳过飞书推送。如需测试可使用 --force。")
         return 0
+    if (
+        expected_report_date
+        and args.write_sent_state
+        and not args.force
+        and not args.dry_run
+        and already_sent_daily_report(expected_report_date)
+    ):
+        logger.info("%s 的收盘日报已经发送过，跳过重复推送。", expected_report_date)
+        return 0
 
     quotes = fetch_quotes()
     report_date = find_report_date(quotes)
@@ -126,8 +138,29 @@ def main() -> int:
         logger.error("%s", exc)
         return 1
 
+    if args.write_sent_state and report_date:
+        write_daily_sent_state(report_date)
     logger.info("飞书推送完成")
     return 0
+
+
+def already_sent_daily_report(report_date: date) -> bool:
+    if not DAILY_SENT_STATE_PATH.exists():
+        return False
+    try:
+        payload = json.loads(DAILY_SENT_STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return payload.get("date") == report_date.isoformat()
+
+
+def write_daily_sent_state(report_date: date) -> None:
+    DAILY_SENT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "date": report_date.isoformat(),
+        "sent_at": datetime.now(CHINA_TZ).isoformat(),
+    }
+    DAILY_SENT_STATE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def run_open_watch(args: argparse.Namespace) -> int:

@@ -143,7 +143,9 @@ LLM_MODEL=你的模型名称
 - 支持手动触发：`workflow_dispatch`。
 - 运行 Python 3.11。
 - 安装 `requirements.txt` 后执行 `python main.py`。
-- 定时触发建议使用 cron-job.org 调用 GitHub workflow dispatch API，避免 GitHub schedule 偶发不触发。
+- 支持 GitHub schedule 兜底触发：北京时间周二到周六约 09:12。
+- 也可以继续使用 cron-job.org 调用 GitHub workflow dispatch API。
+- 正式 workflow 会在发送成功后写入 `data/daily_market/latest_sent.json`，避免 cron-job.org 和 GitHub schedule 双触发时重复推送同一天收盘日报。
 
 开盘观察工作流位于 `.github/workflows/open-watch.yml`，配置如下：
 
@@ -197,6 +199,8 @@ LLM_MODEL=你的模型名称
 ## cron-job.org 定时触发
 
 建议用 cron-job.org 在北京时间周二到周六 9:05 调用 GitHub Actions 手动触发接口。北京时间周六早上对应纽约周五收盘后，因此需要保留周六触发；北京时间周日和周一会对应纽约周六/周日，程序会自动跳过，避免重复推送周五行情。
+
+仓库同时保留 GitHub schedule 作为兜底触发。cron-job.org 如果正常先触发并发送成功，会写入已发送状态；GitHub schedule 随后触发时会自动跳过同一天报告。
 
 请求配置：
 
