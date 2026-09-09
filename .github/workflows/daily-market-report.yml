@@ -55,7 +55,7 @@ jobs:
 
       - name: Commit sent state
         run: |
-          if git diff --quiet -- data/daily_market; then
+          if [ -z "$(git status --porcelain -- data/daily_market)" ]; then
             echo "No daily sent state changes."
             exit 0
           fi

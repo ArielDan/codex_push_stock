@@ -63,7 +63,7 @@ jobs:
 
       - name: Commit open watch JSON outputs
         run: |
-          if git diff --quiet -- data/open_watch; then
+          if [ -z "$(git status --porcelain -- data/open_watch)" ]; then
             echo "No open watch output changes."
             exit 0
           fi
