@@ -30,6 +30,10 @@ class MarketCalendarTest(unittest.TestCase):
         self.assert_expected("2026-12-26 09:05", None)
         self.assert_expected("2026-12-29 09:05", "2026-12-28")
 
+    def test_delayed_github_schedule_still_sends_previous_completed_session(self) -> None:
+        self.assert_expected("2026-09-09 13:56", "2026-09-08")
+        self.assert_expected("2026-12-16 13:56", "2026-12-15")
+
     def test_open_watch_window_uses_new_york_time_in_dst(self) -> None:
         now = datetime.strptime("2026-06-23 22:00", "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("Asia/Shanghai"))
         status = open_watch_window_status(now)

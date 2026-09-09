@@ -72,3 +72,5 @@ permissions:
 - GitHub schedule：北京时间周二到周六约 09:12 兜底触发。
 
 正式 workflow 会在飞书发送成功后更新 `data/daily_market/latest_sent.json`。如果两层触发都运行，后运行的一次会看到同一报告日期已经发送过，并跳过重复推送。
+
+GitHub schedule 可能延迟数小时运行。收盘日报日期判断按纽约时间寻找最近一个已经完成收盘的美股交易日，避免延迟到纽约次日凌晨时误判为当天交易日。

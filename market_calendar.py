@@ -11,6 +11,7 @@ CHINA_TZ = ZoneInfo("Asia/Shanghai")
 NY_TZ = ZoneInfo("America/New_York")
 OPEN_WATCH_START = time(9, 58)
 OPEN_WATCH_END = time(10, 12)
+REGULAR_MARKET_CLOSE = time(16, 0)
 
 
 @dataclass(frozen=True)
@@ -26,10 +27,13 @@ class OpenWatchWindow:
 def expected_china_morning_report_date(now: datetime) -> date | None:
     """Return the US session that a China morning run is allowed to send."""
     china_now = now.astimezone(CHINA_TZ)
-    ny_date = china_now.astimezone(NY_TZ).date()
-    if not is_trading_day(ny_date):
+    if china_now.weekday() in {6, 0}:
         return None
-    return ny_date
+
+    ny_now = china_now.astimezone(NY_TZ)
+    if ny_now.time() >= REGULAR_MARKET_CLOSE:
+        return ny_now.date() if is_trading_day(ny_now.date()) else None
+    return previous_trading_day(ny_now.date() - timedelta(days=1))
 
 
 def previous_trading_day(day: date) -> date:
