@@ -1,6 +1,10 @@
 name: Daily Market Report
 
 on:
+  schedule:
+    # 09:00 Asia/Shanghai, Tuesday-Saturday.
+    # Sends the previous US trading day's close report after US market close.
+    - cron: "0 1 * * 2-6"
   workflow_dispatch:
     inputs:
       force_send:
