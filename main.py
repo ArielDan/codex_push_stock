@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, datetime
-import json
 import logging
 import os
 from pathlib import Path
@@ -13,22 +12,14 @@ from typing import Optional
 
 from config import LOOKBACK_DAYS, all_assets
 from data_sources import PolygonSource, YFinanceSource
-from feishu import send_open_watch_report, send_report
+from feishu import send_report
 from llm_analyzer import generate_market_analysis
 from market_calendar import CHINA_TZ, expected_china_morning_report_date
-from open_watch import (
-    build_open_watch_feishu_report,
-    check_window_text,
-    generate_open_watch_report,
-    should_run_open_watch,
-    write_open_watch_outputs,
-)
 from report_builder import build_report, quote_from_bars
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
-DAILY_SENT_STATE_PATH = Path(__file__).resolve().parent / "data" / "daily_market" / "latest_sent.json"
 
 
 def load_dotenv_if_available() -> None:
@@ -43,11 +34,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="每日美股收盘简报飞书推送")
     parser.add_argument("--dry-run", action="store_true", help="只打印报告，不发送飞书")
     parser.add_argument("--force", action="store_true", help="忽略周末保护，强制生成并发送报告")
-    parser.add_argument("--write-sent-state", action="store_true", help="收盘日报：发送成功后写入已发送日期状态")
-    parser.add_argument("--open-watch", action="store_true", help="运行美股开盘后 30 分钟观察")
-    parser.add_argument("--check-window", action="store_true", help="只检查开盘观察运行窗口，不拉行情、不发送飞书")
-    parser.add_argument("--force-send", action="store_true", help="开盘观察：忽略时间窗口，强制生成并发送")
-    parser.add_argument("--write-output", action="store_true", help="开盘观察：写入 data/open_watch JSON 输出")
     return parser.parse_args()
 
 
@@ -97,22 +83,10 @@ def main() -> int:
     args = parse_args()
     load_dotenv_if_available()
 
-    if args.open_watch:
-        return run_open_watch(args)
-
     now = datetime.now(CHINA_TZ)
     expected_report_date = expected_china_morning_report_date(now)
     if expected_report_date is None and not args.force and not args.dry_run:
         logger.info("本次触发不对应新的美股收盘交易日，已跳过飞书推送。如需测试可使用 --force。")
-        return 0
-    if (
-        expected_report_date
-        and args.write_sent_state
-        and not args.force
-        and not args.dry_run
-        and already_sent_daily_report(expected_report_date)
-    ):
-        logger.info("%s 的收盘日报已经发送过，跳过重复推送。", expected_report_date)
         return 0
 
     quotes = fetch_quotes()
@@ -138,60 +112,7 @@ def main() -> int:
         logger.error("%s", exc)
         return 1
 
-    if args.write_sent_state and report_date:
-        write_daily_sent_state(report_date)
     logger.info("飞书推送完成")
-    return 0
-
-
-def already_sent_daily_report(report_date: date) -> bool:
-    if not DAILY_SENT_STATE_PATH.exists():
-        return False
-    try:
-        payload = json.loads(DAILY_SENT_STATE_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return payload.get("date") == report_date.isoformat()
-
-
-def write_daily_sent_state(report_date: date) -> None:
-    DAILY_SENT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "date": report_date.isoformat(),
-        "sent_at": datetime.now(CHINA_TZ).isoformat(),
-    }
-    DAILY_SENT_STATE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def run_open_watch(args: argparse.Namespace) -> int:
-    now = datetime.now(CHINA_TZ)
-    if args.check_window:
-        print(check_window_text(now))
-        return 0
-
-    should_run, reason, _ = should_run_open_watch(now)
-    if not should_run and not args.force_send and not args.dry_run:
-        logger.info("%s", reason)
-        return 0
-
-    report_json = generate_open_watch_report(now)
-    report_text = build_open_watch_feishu_report(report_json)
-
-    if args.write_output:
-        write_open_watch_outputs(report_json)
-        logger.info("开盘观察 JSON 已写入 data/open_watch/")
-
-    if args.dry_run:
-        print(report_text)
-        return 0
-
-    try:
-        send_open_watch_report(report_text)
-    except Exception as exc:
-        logger.error("%s", exc)
-        return 1
-
-    logger.info("开盘观察飞书推送完成")
     return 0
 
 
